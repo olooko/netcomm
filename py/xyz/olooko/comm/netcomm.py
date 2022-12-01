@@ -1,14 +1,12 @@
 from enum import Enum
-import asyncio
+#import asyncio
 import socket
 import struct
 import threading
+import time
 
 INT_MAXVAL = 2147483647
 FLOAT_MAXVAL = 3.40282347e+38
-
-BUF_SZ = 4096
-INTRPT_TM = 4000
 
 
 class NetSocketDataParsingStep(Enum):
@@ -209,6 +207,15 @@ class NetSocketReceivedData:
         self.__remote_address = address
 
 
+class NetSocketSendDataBuildResult(Enum):
+    ByteArrayOverflowError = 0
+    NoData = 1
+    StringOverflowError = 2 
+    Successful = 3
+    TextOverflowError = 4
+    TypeNotImplementedError = 5
+
+
 class NetSocketSendData:
     @property
     def args(self):
@@ -226,7 +233,12 @@ class NetSocketSendData:
     def length(self):
         return len(self.__bytes)
 
+    @property
+    def buildResult(self):
+        return self.__result       
+
     def __init__(self, command, args):
+        self.__result = NetSocketSendDataBuildResult.NoData
         self.__command = command
         self.__args = args
         text = bytearray([command])
@@ -279,7 +291,8 @@ class NetSocketSendData:
                         text.extend(bytearray(struct.pack('i', argL)))
                     text.extend(bytearray(arg))
                 else:
-                    raise OverflowError('str is too large')
+                    self.__result = NetSocketSendDataBuildResult.StringOverflowError
+                    return
             elif type(arg) is bytearray:
                 argL = len(arg)
                 if argL <= INT_MAXVAL:
@@ -297,9 +310,11 @@ class NetSocketSendData:
                         text.extend(bytearray(struct.pack('i', argL)))     
                     text.extend(arg)
                 else:
-                    raise OverflowError('bytearray is too large')
+                    self.__result = NetSocketSendDataBuildResult.ByteArrayOverflowError
+                    return
             else:
-                raise NotImplementedError('type %s is not implemented' % type(arg))
+                self.__result = NetSocketSendDataBuildResult.TypeNotImplementedError
+                return
         # start of header
         data = bytearray([0x01]) 
         textlen = len(text)
@@ -328,8 +343,10 @@ class NetSocketSendData:
             # end of transmission
             data.append(0x04) 
         else:
-            raise OverflowError('text is too large')
+            self.__result = NetSocketSendDataBuildResult.TextOverflowError
+            return
         self.__bytes = data
+        self.__result = NetSocketSendDataBuildResult.Successful
 
 
 class NetSocket:
@@ -349,16 +366,21 @@ class NetSocket:
         self.__data = NetSocketData()
         self.__protocol = protocolType
         self.__socket = socket
-        address = self.__socket.getsockname()
-        self.__local_address = NetSocketAddress(address[0], address[1])
         self.__connected = False
         self.__result = NetSocketDataManipulationResult.NoData
+        if self.available:
+            address = self.__socket.getsockname()
+            self.__local_address = NetSocketAddress(address[0], address[1])
+        else:
+            self.__local_address = NetSocketAddress('0.0.0.0', 0)
 
     def close(self):
-        self.__socket.close()
+        if self.available:
+            self.__socket.close()
 
     def __send(self, data, address):
-        self.__send_proc(data, address, 0)
+        if self.available:        
+            self.__send_proc(data, address, 0)
 
     def __send_proc(self, data, address, bytes_transferred):
         length = 0
@@ -376,14 +398,15 @@ class NetSocket:
                 self.__send_proc(data, address, bytes_transferred) 
 
     def setReceivedCallback(self, callback):
-        t = threading.Thread(target=self.__receive_proc, args=(callback,))
-        t.start()
+        if self.available:  
+            t = threading.Thread(target=self.__receive_proc, args=(callback,))
+            t.start()
 
     def __receive_proc(self, callback):
         while True:
             remote_address = None
             if self.__protocol == NetSocketProtocolType.Tcp:
-                buffer = self.__socket.recv(BUF_SZ)
+                buffer = self.__socket.recv(4096)
                 if len(buffer) > 0: 
                     self.__connected = True
                 else:
@@ -391,7 +414,7 @@ class NetSocket:
                 address = self.__socket.getpeername()
                 remote_address = NetSocketAddress(address[0], address[1])
             elif self.__protocol == NetSocketProtocolType.Udp:
-                buffer, address = self.__socket.recvfrom(BUF_SZ)
+                buffer, address = self.__socket.recvfrom(4096)
                 remote_address = NetSocketAddress(address[0], address[1])
             if len(buffer) > 0:
                 self.__data.append(buffer)
@@ -404,7 +427,8 @@ class NetSocket:
                         callback(self, NetSocketReceivedData(0X00, [], NetSocketReceivedDataResult.ParsingError, remote_address))
                         return
                     elif self.__result == NetSocketDataManipulationResult.InProgress:
-                        asyncio.run(self.__check_interrupted_timeout(INTRPT_TM, callback, remote_address))
+                        t = threading.Thread(target=self.__check_interrupted_timeout, args=(self, 15000, callback, remote_address,))
+                        t.start()
                         break
                     elif self.__result == NetSocketDataManipulationResult.NoData:
                         break
@@ -413,10 +437,11 @@ class NetSocket:
                 callback(self, NetSocketReceivedData(0x00, [], NetSocketReceivedDataResult.Closed, remote_address))
                 break
 
-    async def __check_interrupted_timeout(self, milliseconds, callback, address):
-        await asyncio.sleep(float(milliseconds) / 1000)
-        if self.__result == NetSocketDataManipulationResult.InProgress:
-            callback(self, NetSocketReceivedData(0X00, [], NetSocketReceivedDataResult.Interrupted, address))         
+    @staticmethod
+    def __check_interrupted_timeout(s, milliseconds, callback, address):
+        time.sleep(float(milliseconds) / 1000)
+        if s.__result == NetSocketDataManipulationResult.InProgress:
+            callback(s, NetSocketReceivedData(0X00, [], NetSocketReceivedDataResult.Interrupted, address))         
 
 
 class TcpServer:

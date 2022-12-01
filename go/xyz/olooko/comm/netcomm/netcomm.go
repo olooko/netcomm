@@ -3,7 +3,6 @@ package netcomm
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -11,13 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
-
-const (
-	INT_MAXVAL   = 2147483647
-	FLOAT_MAXVAL = 3.40282347e+38
-	BUF_SZ       = 4096
-	INTRPT_TM    = 4000
 )
 
 const (
@@ -292,6 +284,7 @@ type NetSocketSendData struct {
 	command byte
 	args    []interface{}
 	bytes   []byte
+	result  int
 }
 
 func (d NetSocketSendData) GetArgs() []interface{} {
@@ -310,7 +303,21 @@ func (d NetSocketSendData) GetLength() int {
 	return len(d.bytes)
 }
 
-func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, error) {
+func (d NetSocketSendData) GetBuildResult() int {
+	return d.result
+}
+
+const (
+	NetSocketSendDataBuildResult_ByteArrayOverflowError = iota
+	NetSocketSendDataBuildResult_NoData
+	NetSocketSendDataBuildResult_StringOverflowError
+	NetSocketSendDataBuildResult_Successful
+	NetSocketSendDataBuildResult_TextOverflowError
+	NetSocketSendDataBuildResult_TypeNotImplementedError
+)
+
+func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
+
 	text := bytes.Buffer{}
 	textlen := 0
 
@@ -351,7 +358,7 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 
 		case "float32", "float64":
 			f, _ := strconv.ParseFloat(fmt.Sprintf("%v", arg), 64)
-			if math.Abs(f) <= FLOAT_MAXVAL {
+			if math.Abs(f) <= math.MaxFloat32 {
 				// 0101 0100
 				text.Write([]byte{byte(0x54)})
 				textlen += 1
@@ -373,7 +380,7 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 
 		case "string":
 			s := []byte(fmt.Sprintf("%v", arg))
-			if len(s) <= INT_MAXVAL {
+			if len(s) <= math.MaxInt32 {
 				if len(s) <= 0x7F {
 					// 1001 0001
 					text.Write([]byte{byte(0x91)})
@@ -396,12 +403,12 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 				text.Write(s)
 				textlen += len(s)
 			} else {
-				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}}, errors.New("string is too large")
+				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_StringOverflowError}
 			}
 
 		case "[]byte", "[]uint8":
 			b := arg.([]uint8)
-			if len(b) <= INT_MAXVAL {
+			if len(b) <= math.MaxInt32 {
 				if len(b) <= 0x7F {
 					// 1011 0001
 					text.Write([]byte{byte(0xB1)})
@@ -424,12 +431,11 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 				text.Write(b)
 				textlen += len(b)
 			} else {
-				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}}, errors.New("[]byte is too large")
+				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_ByteArrayOverflowError}
 			}
 
 		default:
-			errmsg := fmt.Sprintf("type %s is not implemented", argType)
-			return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}}, errors.New(errmsg)
+			return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_TypeNotImplementedError}
 		}
 	}
 
@@ -438,7 +444,7 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 	data := bytes.Buffer{}
 	datapos := 0
 
-	if textlen <= INT_MAXVAL {
+	if textlen <= math.MaxInt32 {
 
 		// start of header
 		data.Write([]byte{byte(0x01)})
@@ -487,10 +493,12 @@ func NewNetSocketSendData(command byte, args []interface{}) (NetSocketSendData, 
 		// end of transmission
 		data.Write([]byte{byte(0x04)})
 		datapos += 1
+
 	} else {
-		return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}}, errors.New("text is too large")
+		return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_TextOverflowError}
 	}
-	return NetSocketSendData{command, args, data.Bytes()}, nil
+
+	return NetSocketSendData{command, args, data.Bytes(), NetSocketSendDataBuildResult_Successful}
 }
 
 type NetSocket struct {
@@ -506,22 +514,30 @@ type NetSocket struct {
 
 func NewNetSocket(c net.Conn, p net.PacketConn, protocol int) NetSocket {
 	netsock := NetSocket{}
-	netsock.buffer = make([]byte, BUF_SZ)
+	netsock.buffer = make([]byte, 4096)
 	netsock.data = NewNetSocketData()
 	netsock.protocol = protocol
 
 	if protocol == NetSocketProtocolType_Tcp {
 		netsock.conn = c
-		ss := strings.Split(c.LocalAddr().String(), ":")
-		host := strings.Join(ss[:len(ss)-1], ":")
-		port, _ := strconv.Atoi(ss[len(ss)-1])
-		netsock.localAddress = NewNetSocketAddress(host, port)
+		if c != nil {
+			ss := strings.Split(c.LocalAddr().String(), ":")
+			host := strings.Join(ss[:len(ss)-1], ":")
+			port, _ := strconv.Atoi(ss[len(ss)-1])
+			netsock.localAddress = NewNetSocketAddress(host, port)
+		} else {
+			netsock.localAddress = NewNetSocketAddress("0.0.0.0", 0)
+		}
 	} else if protocol == NetSocketProtocolType_Udp {
 		netsock.packetConn = p
-		ss := strings.Split(p.LocalAddr().String(), ":")
-		host := strings.Join(ss[:len(ss)-1], ":")
-		port, _ := strconv.Atoi(ss[len(ss)-1])
-		netsock.localAddress = NewNetSocketAddress(host, port)
+		if p != nil {
+			ss := strings.Split(p.LocalAddr().String(), ":")
+			host := strings.Join(ss[:len(ss)-1], ":")
+			port, _ := strconv.Atoi(ss[len(ss)-1])
+			netsock.localAddress = NewNetSocketAddress(host, port)
+		} else {
+			netsock.localAddress = NewNetSocketAddress("0.0.0.0", 0)
+		}
 	}
 	return netsock
 }
@@ -544,15 +560,19 @@ func (s NetSocket) GetProtocolType() int {
 }
 
 func (s NetSocket) Close() {
-	if s.protocol == NetSocketProtocolType_Tcp {
-		s.conn.Close()
-	} else if s.protocol == NetSocketProtocolType_Udp {
-		s.packetConn.Close()
+	if s.IsAvailable() {
+		if s.protocol == NetSocketProtocolType_Tcp {
+			s.conn.Close()
+		} else if s.protocol == NetSocketProtocolType_Udp {
+			s.packetConn.Close()
+		}
 	}
 }
 
 func (s NetSocket) Send(data NetSocketSendData, address NetSocketAddress) {
-	s.sendProc(data, address, 0)
+	if s.IsAvailable() {
+		s.sendProc(data, address, 0)
+	}
 }
 
 func (s *NetSocket) sendProc(data NetSocketSendData, address NetSocketAddress, bytesTransferred int) {
@@ -579,7 +599,9 @@ func (s *NetSocket) sendProc(data NetSocketSendData, address NetSocketAddress, b
 }
 
 func (s NetSocket) SetReceivedCallback(callback func(NetSocket, NetSocketReceivedData)) {
-	go s.receiveProc(callback)
+	if s.IsAvailable() {
+		go s.receiveProc(callback)
+	}
 }
 
 func (s *NetSocket) receiveProc(callback func(NetSocket, NetSocketReceivedData)) {
@@ -623,7 +645,7 @@ func (s *NetSocket) receiveProc(callback func(NetSocket, NetSocketReceivedData))
 					callback(*s, NewNetSocketReceivedData(0x00, make([]interface{}, 0), NetSocketReceivedDataResult_ParsingError, remoteAddress))
 					return
 				} else if s.result == NetSocketDataManipulationResult_InProgress {
-					go s.checkInterruptedTimeout(INTRPT_TM, callback, remoteAddress)
+					go checkInterruptedTimeout(s, 15000, callback, remoteAddress)
 					break
 				} else if s.result == NetSocketDataManipulationResult_NoData {
 					break
@@ -637,11 +659,11 @@ func (s *NetSocket) receiveProc(callback func(NetSocket, NetSocketReceivedData))
 	}
 }
 
-func (s NetSocket) checkInterruptedTimeout(milliseconds int, callback func(NetSocket, NetSocketReceivedData), address NetSocketAddress) {
+func checkInterruptedTimeout(s *NetSocket, milliseconds int, callback func(NetSocket, NetSocketReceivedData), address NetSocketAddress) {
 	time.Sleep(time.Duration(milliseconds) * time.Millisecond)
 
 	if s.result == NetSocketDataManipulationResult_InProgress {
-		callback(s, NewNetSocketReceivedData(0x00, make([]interface{}, 0), NetSocketReceivedDataResult_Interrupted, address))
+		callback(*s, NewNetSocketReceivedData(0x00, make([]interface{}, 0), NetSocketReceivedDataResult_Interrupted, address))
 	}
 }
 

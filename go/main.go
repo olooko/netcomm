@@ -42,11 +42,10 @@ func TcpClientThread() {
 		for {
 			if tcpsocket.IsConnected() {
 				args := []interface{}{-256, true, "Hello", -1.1, []byte{0x41, 0x42, 0x43}}
-				data, err := netcomm.NewNetSocketSendData(byte(0x88), args)
-				if err == nil {
+				data := netcomm.NewNetSocketSendData(byte(0x88), args)
+				if data.GetBuildResult() == netcomm.NetSocketSendDataBuildResult_Successful {
 					tcpsocket.Send(data)
 				}
-
 			} else {
 				break
 			}
@@ -64,12 +63,11 @@ func UdpSocketThread() {
 
 		for {
 			args := []interface{}{-256, true, "Hello", -1.1, []byte{0x41, 0x42, 0x43}}
-			data, err := netcomm.NewNetSocketSendData(byte(0x88), args)
+			data := netcomm.NewNetSocketSendData(byte(0x88), args)
 
-			if err != nil {
-				break
+			if data.GetBuildResult() == netcomm.NetSocketSendDataBuildResult_Successful {
+				udpsocket.Send(data, netcomm.NewNetSocketAddress("127.0.0.1", 10010))
 			}
-			udpsocket.Send(data, netcomm.NewNetSocketAddress("127.0.0.1", 10010))
 			time.Sleep(5 * time.Second)
 		}
 	}

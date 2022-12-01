@@ -26,14 +26,6 @@ namespace xyz.olooko.comm.netcomm
     }
 
     /// <summary>
-    /// NetSocketReceivedDataResult
-    /// </summary>
-    public enum NetSocketReceivedDataResult
-    {
-        Closed, Completed, Interrupted, ParsingError
-    }
-
-    /// <summary>
     /// NetSocketData
     /// </summary>
     public class NetSocketData 
@@ -304,6 +296,14 @@ namespace xyz.olooko.comm.netcomm
     }
 
     /// <summary>
+    /// NetSocketReceivedDataResult
+    /// </summary>
+    public enum NetSocketReceivedDataResult
+    {
+        Closed, Completed, Interrupted, ParsingError
+    }
+
+    /// <summary>
     /// NetSocketReceivedData 
     /// </summary>
     public class NetSocketReceivedData
@@ -342,6 +342,19 @@ namespace xyz.olooko.comm.netcomm
     }
 
     /// <summary>
+    /// NetSocketSendDataBuildResult
+    /// </summary>
+    public enum NetSocketSendDataBuildResult
+    {
+        ByteArrayOverflowError,
+        NoData,
+        StringOverflowError,
+        Successful,
+        TextOverflowError,
+        TypeNotImplementedError
+    }
+
+    /// <summary>
     /// NetSocketSendData 
     /// </summary>
     public class NetSocketSendData
@@ -369,10 +382,20 @@ namespace xyz.olooko.comm.netcomm
             get { return _bytes.Length; }
         }
 
+        private NetSocketSendDataBuildResult _result;
+        public NetSocketSendDataBuildResult BuildResult
+        {
+            get { return _result; }
+        }
+
         public NetSocketSendData(byte command, object[] args)
         {
+            _result = NetSocketSendDataBuildResult.NoData;
+
             _command = command;
             _args = args;
+
+            _bytes = new byte[0];
 
             MemoryStream textms = new MemoryStream();
 
@@ -426,7 +449,7 @@ namespace xyz.olooko.comm.netcomm
                         {
                             double f = Convert.ToDouble(arg);
 
-                            if (Convert.ToDouble(float.MinValue) <= f && f <= Convert.ToDouble(float.MaxValue))
+                            if (Math.Abs(f) <= Convert.ToDouble(float.MaxValue))
                             {
                                 // 0101 0100
                                 textms.Write(new byte[] { 0x54 }, 0, 1);
@@ -474,7 +497,10 @@ namespace xyz.olooko.comm.netcomm
                                 textms.Write(s, 0, s.Length);
                             }
                             else
-                                throw new OverflowException("String is too large");
+                            {
+                                _result = NetSocketSendDataBuildResult.StringOverflowError;
+                                return;
+                            }
                         }
                         break;
 
@@ -506,12 +532,16 @@ namespace xyz.olooko.comm.netcomm
                                 textms.Write(b, 0, b.Length);
                             }
                             else
-                                throw new OverflowException("Byte[] is too large");
+                            {
+                                _result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                                return;
+                            }
                         }
                         break;
 
                     default:
-                        throw new NotImplementedException(String.Format("type {0} is not implemented", arg.GetType().Name));
+                        _result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                        return;
                 }
             }
 
@@ -570,15 +600,18 @@ namespace xyz.olooko.comm.netcomm
 
                 // end of transmission
                 data[datapos] = 0x04; datapos += 1;
+
                 textms.Close();
             }
             else
             {
                 textms.Close();
-                throw new OverflowException("text is too large");
+                _result = NetSocketSendDataBuildResult.TextOverflowError;
+                return;
             }
 
             _bytes = data;
+            _result = NetSocketSendDataBuildResult.Successful;
         }
     }
 
@@ -653,10 +686,6 @@ namespace xyz.olooko.comm.netcomm
     /// </summary>
     public class NetSocket 
     {
-        private const int BUF_SZ = 4096;
-        private const int INTRPT_TM = 4000;
-
-    
         private byte[] _buffer;
         private NetSocketData _data;
         private Socket _socket;
@@ -668,10 +697,10 @@ namespace xyz.olooko.comm.netcomm
             get { return _socket != null; }
         }
 
-        private NetSocketAddress _localAddr;
+        private NetSocketAddress _localAddress;
         public NetSocketAddress LocalAddress
         {
-            get { return _localAddr; }
+            get { return _localAddress; }
         }
 
         private NetSocketProtocolType _protocol;
@@ -683,24 +712,30 @@ namespace xyz.olooko.comm.netcomm
         public NetSocket(Socket s, NetSocketProtocolType protocol) 
         {
             _data = new NetSocketData();
-            _buffer = new byte[BUF_SZ];
+            _buffer = new byte[4096];
             _protocol = protocol;
+            _result = NetSocketDataManipulationResult.NoData;
             _socket = s;
 
-            _result = NetSocketDataManipulationResult.NoData;
-
-            IPEndPoint iep = _socket.LocalEndPoint as IPEndPoint;
-            _localAddr = new NetSocketAddress(iep.Address, iep.Port);
+            if (this.Available)
+            {
+                IPEndPoint iep = _socket.LocalEndPoint as IPEndPoint;
+                _localAddress = new NetSocketAddress(iep.Address, iep.Port);
+            }
+            else
+                _localAddress = new NetSocketAddress("0,0.0.0", 0);
         }
 
         public void Close() 
         {
-            _socket.Close();
+            if (this.Available)
+                _socket.Close();
         }
 
         protected void Send(NetSocketSendData data, NetSocketAddress address)
         {
-            SendProc(data, address, 0);
+            if (this.Available)
+                SendProc(data, address, 0);
         }
 
         private void SendProc(NetSocketSendData data, NetSocketAddress address, int bytesTransferred)
@@ -721,9 +756,12 @@ namespace xyz.olooko.comm.netcomm
 
         public void SetReceivedCallback(Action<NetSocket, NetSocketReceivedData> callback) 
         {
-            Thread t = new Thread(new ParameterizedThreadStart(ReceiveProc));
-            t.IsBackground = true;
-            t.Start(callback);
+            if (this.Available)
+            {
+                Thread t = new Thread(new ParameterizedThreadStart(ReceiveProc));
+                t.IsBackground = true;
+                t.Start(callback);
+            }
         }
 
         private void ReceiveProc(object state) 
@@ -772,7 +810,7 @@ namespace xyz.olooko.comm.netcomm
                         }
                         else if (_result == NetSocketDataManipulationResult.InProgress)
                         {
-                            CheckInterruptedTimeout(INTRPT_TM, callback, remoteAddress);
+                            CheckInterruptedTimeout(this, 15000, callback, remoteAddress);
                             break;
                         }
                         else if (_result == NetSocketDataManipulationResult.NoData)
@@ -791,12 +829,12 @@ namespace xyz.olooko.comm.netcomm
             }
         }
 
-        private async void CheckInterruptedTimeout(int milliseconds, Action<NetSocket, NetSocketReceivedData> callback, NetSocketAddress address)
+        private static async void CheckInterruptedTimeout(NetSocket s, int milliseconds, Action<NetSocket, NetSocketReceivedData> callback, NetSocketAddress address)
         {
             await Task.Delay(milliseconds);
 
-            if (_result == NetSocketDataManipulationResult.InProgress)
-                callback(this, new NetSocketReceivedData(0x00, new object[] { }, NetSocketReceivedDataResult.Interrupted, address));
+            if (s._result == NetSocketDataManipulationResult.InProgress)
+                callback(s, new NetSocketReceivedData(0x00, new object[] { }, NetSocketReceivedDataResult.Interrupted, address));
         }
     }
 
@@ -847,10 +885,10 @@ namespace xyz.olooko.comm.netcomm
             get { return Available && _socket.Connected; }
         }
 
-        private NetSocketAddress _address;
+        private NetSocketAddress _remoteAddress;
         public NetSocketAddress RemoteAddress
         {
-            get { return _address; }
+            get { return _remoteAddress; }
         }
 
         public TcpSocket(Socket s)
@@ -859,7 +897,7 @@ namespace xyz.olooko.comm.netcomm
             _socket = s;
 
             IPEndPoint iep = s.RemoteEndPoint as IPEndPoint;
-            _address = new NetSocketAddress(iep.Address, iep.Port);
+            _remoteAddress = new NetSocketAddress(iep.Address, iep.Port);
         }
 
         public void Send(NetSocketSendData data)

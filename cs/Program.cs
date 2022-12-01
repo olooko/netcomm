@@ -63,7 +63,10 @@ namespace xyz.olooko.comm
                     if (tcpsocket.Connected)
                     {
                         object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                        tcpsocket.Send(new NetSocketSendData(0x88, args));
+                        NetSocketSendData data = new NetSocketSendData(0x88, args);
+
+                        if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
+                            tcpsocket.Send(data);
                     }
                     else
                         break;
@@ -85,7 +88,10 @@ namespace xyz.olooko.comm
                 while (true)
                 {
                     object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                    udpsocket.Send(new NetSocketSendData(0x88, args), new NetSocketAddress("127.0.0.1", 10010));
+                    NetSocketSendData data = new NetSocketSendData(0x88, args);
+
+                    if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
+                        udpsocket.Send(data, new NetSocketAddress("127.0.0.1", 10010));
 
                     Thread.Sleep(5 * 1000);
                 }

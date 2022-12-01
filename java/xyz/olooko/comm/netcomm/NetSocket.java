@@ -7,9 +7,6 @@ import java.net.Socket;
 
 public class NetSocket implements Runnable {
     
-    private static final int BUF_SZ = 4096;
-    private static final int INTRPT_TM = 4000;
-
     private NetSocketReceivedCallback _callback;
 
     private byte[] _buffer;
@@ -28,6 +25,8 @@ public class NetSocket implements Runnable {
         return false; 
     }
 
+    private NetSocketAddress _remoteAddress;
+
     private NetSocketAddress _localAddress;
     public NetSocketAddress getLocalAddress() {
         return _localAddress;
@@ -39,53 +38,66 @@ public class NetSocket implements Runnable {
     }    
 
     public NetSocket(Socket s, NetSocketProtocolType protocolType) {
-        _buffer = new byte[BUF_SZ];
-        _data = new NetSocketData();
-        _protocol = protocolType;
+        Initialize(protocolType);
         _socket = s;
-
-        _result = NetSocketDataManipulationResult.NoData;
-
-        InetSocketAddress address = (InetSocketAddress)_socket.getLocalSocketAddress();
-        _localAddress = new NetSocketAddress(address.getAddress(), address.getPort());
+        if (isAvailable())  {
+            InetSocketAddress address = (InetSocketAddress)_socket.getLocalSocketAddress();
+            _localAddress = new NetSocketAddress(address.getAddress(), address.getPort());
+        } else {
+            _localAddress = new NetSocketAddress("0.0.0.0", 0);
+        }
     }
 
     public NetSocket(DatagramSocket s, NetSocketProtocolType protocolType) {
-        _buffer = new byte[BUF_SZ];
-        _data = new NetSocketData();
-        _protocol = protocolType;
+        Initialize(protocolType);
         _dgram = s;
-
-        InetSocketAddress address = (InetSocketAddress)_dgram.getLocalSocketAddress();
-        _localAddress = new NetSocketAddress(address.getAddress(), address.getPort());        
+        if (isAvailable()) {
+            InetSocketAddress address = (InetSocketAddress)_dgram.getLocalSocketAddress();
+            _localAddress = new NetSocketAddress(address.getAddress(), address.getPort());   
+        } else {
+            _localAddress = new NetSocketAddress("0.0.0.0", 0);
+        }
     }    
 
+    private void Initialize(NetSocketProtocolType protocolType) {
+        _buffer = new byte[4096];
+        _data = new NetSocketData();
+        _protocol = protocolType;
+        _result = NetSocketDataManipulationResult.NoData;
+    }
+
     public void close() {
-        try {
-            if (_protocol == NetSocketProtocolType.Tcp) {
-                _socket.close();
-            } else if (_protocol == NetSocketProtocolType.Udp) {
-                _dgram.close();
-            }  
-        } catch (Exception e) {}
+        if (isAvailable()) {
+            try {
+                if (_protocol == NetSocketProtocolType.Tcp) {
+                        _socket.close();
+                } else if (_protocol == NetSocketProtocolType.Udp) {
+                        _dgram.close();
+                }  
+            } catch (Exception e) {}
+        }
     }
      
     protected void send(NetSocketSendData data, NetSocketAddress address) {
-        try {
-            if (_protocol == NetSocketProtocolType.Tcp) {
-                _socket.getOutputStream().write(data.getBytes(), 0, data.getLength());
-                _socket.getOutputStream().flush();
-            } else if (_protocol == NetSocketProtocolType.Udp) {
-				DatagramPacket packet = new DatagramPacket(data.getBytes(), data.getLength(), address.getInetAddress(), address.getPort());
-                _dgram.send(packet);
-            }
-        } catch (Exception e) {}
+        if (isAvailable()) {
+            try {
+                if (_protocol == NetSocketProtocolType.Tcp) {
+                    _socket.getOutputStream().write(data.getBytes(), 0, data.getLength());
+                    _socket.getOutputStream().flush();
+                } else if (_protocol == NetSocketProtocolType.Udp) {
+                    DatagramPacket packet = new DatagramPacket(data.getBytes(), data.getLength(), address.getInetAddress(), address.getPort());
+                    _dgram.send(packet);
+                }
+            } catch (Exception e) {}
+        }
     }  
 
     public void setReceivedCallback(NetSocketReceivedCallback callback) {
-        _callback = callback;
-        Thread t = new Thread(this);
-        t.start();
+        if (isAvailable()) {
+            _callback = callback;
+            Thread t = new Thread(this);
+            t.start();
+        }
     }
 
     @Override
@@ -94,7 +106,7 @@ public class NetSocket implements Runnable {
 
         while (true) {
             int bytesTransferred = 0;
-            NetSocketAddress remoteAddress = new NetSocketAddress("0.0.0.0", 0);
+            _remoteAddress = new NetSocketAddress("0.0.0.0", 0);
 
             if (_protocol == NetSocketProtocolType.Tcp) {
                 try {
@@ -102,7 +114,7 @@ public class NetSocket implements Runnable {
                 } catch (Exception e) {}
 
                 InetSocketAddress address = (InetSocketAddress)_socket.getRemoteSocketAddress();
-                remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());                
+                _remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());                
             }
             else if (_protocol == NetSocketProtocolType.Udp) {
                 try {
@@ -110,7 +122,7 @@ public class NetSocket implements Runnable {
                     _dgram.receive(packet);
 
                     InetSocketAddress address = (InetSocketAddress)packet.getSocketAddress();
-                    remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());
+                    _remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());
 
                     bytesTransferred = packet.getLength();
                 } catch (Exception e) {
@@ -118,20 +130,30 @@ public class NetSocket implements Runnable {
             }
 
             if (bytesTransferred > 0) {
-                
-                _data.Append(_buffer, bytesTransferred);
 
+                _data.Append(_buffer, bytesTransferred);
+                
                 while (true) {
                     _result = _data.Manipulate();
 
                     if (_result == NetSocketDataManipulationResult.Completed) {
-                        _callback.callbackMethod(this, new NetSocketReceivedData(_data.getCommand(), _data.getArgs(), NetSocketReceivedDataResult.Completed, remoteAddress));
+                        
+                        _callback.callbackMethod(this, new NetSocketReceivedData(_data.getCommand(), _data.getArgs(), NetSocketReceivedDataResult.Completed, _remoteAddress));
                         continue;
                     } else if (_result == NetSocketDataManipulationResult.ParsingError) {
-                        _callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.ParsingError, remoteAddress));
+                        _callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.ParsingError, _remoteAddress));
                         return;
                     } else if (_result == NetSocketDataManipulationResult.InProgress) {
-                        checkInterruptedTimeout(INTRPT_TM, _callback, remoteAddress);
+
+                        Thread t = new Thread(() -> {
+                            try {
+                                Thread.sleep(15000);
+                            } catch (Exception e) {}
+                
+                            if (_result == NetSocketDataManipulationResult.InProgress)
+                                _callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.Interrupted, _remoteAddress));
+                        });
+                        t.start();
                         break;
                     } else if (_result == NetSocketDataManipulationResult.NoData) {
                         break;
@@ -139,23 +161,9 @@ public class NetSocket implements Runnable {
                 }
                 continue;
             } else {
-                _callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.Closed, remoteAddress));
+                _callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.Closed, _remoteAddress));
                 break;
             }
         }  
     } 
-    
-    private void checkInterruptedTimeout(int milliseconds, NetSocketReceivedCallback callback, NetSocketAddress address)
-    {
-        Thread t = new Thread(() -> {
-            try {
-                Thread.sleep(milliseconds);
-            } catch (Exception e) {}
-
-            if (_result == NetSocketDataManipulationResult.InProgress)
-                callback.callbackMethod(this, new NetSocketReceivedData((byte)0x00, new Object[] {}, NetSocketReceivedDataResult.Interrupted, address));
-        });
-        t.start();
-    }
-  
 }

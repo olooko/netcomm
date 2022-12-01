@@ -1,8 +1,19 @@
 package xyz.olooko.comm.netcomm;
 
-import java.nio.BufferOverflowException;
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+
+class NetSocketDataStream extends ByteArrayOutputStream {
+
+    public byte[] getBuffer() {
+        return super.buf;
+    }
+
+    public int getCount() {
+        return super.count;
+    }
+}
 
 public class NetSocketSendData {
  
@@ -21,12 +32,17 @@ public class NetSocketSendData {
         return _command;
     }
 
-
     public int getLength() {
         return _bytes.length;
     }
 
-    public NetSocketSendData(byte command, Object[] args) {
+    private NetSocketSendDataBuildResult _result;
+    public NetSocketSendDataBuildResult getBuildResult() {
+        return _result;
+    }
+
+    public NetSocketSendData(byte command, Object[] args) {       
+        _result = NetSocketSendDataBuildResult.NoData;
         _command = command;
         _args = args;
 
@@ -65,7 +81,7 @@ public class NetSocketSendData {
                 case "float":
                 case "double":
                     double f = Double.valueOf(String.valueOf(arg));
-                    if (Float.MIN_VALUE <= f && f <= Float.MAX_VALUE) {
+                    if (Math.abs(f) <= Float.MAX_VALUE) {
                         // 0101 0100
                         textds.write(new byte[] { (byte)0x54 }, 0, 1);
                         textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat((float)f).array(), 0, 4);
@@ -98,9 +114,10 @@ public class NetSocketSendData {
                             textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)s.length).array(), 0, 4);
                         }
                         textds.write(s, 0, s.length);
-                    } else
-                        throw new BufferOverflowException();
-                    
+                    } else {
+                        _result = NetSocketSendDataBuildResult.StringOverflowError;
+                        return;
+                    }
                     break;
 
                 case "byte[]":
@@ -120,12 +137,15 @@ public class NetSocketSendData {
                             textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)b.length).array(), 0, 4);
                         }
                         textds.write(b, 0, b.length);
-                    } else
-                        throw new BufferOverflowException();
+                    } else {
+                        _result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                        return;
+                    }
                     break;
 
                 default:
-                    throw new UnsupportedOperationException(String.format("type %s is not implemented", arg.getClass()));
+                    _result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                    return;
             }
         }
 
@@ -179,9 +199,11 @@ public class NetSocketSendData {
             // end of transmission
             data[datapos] = 0x04; datapos += 1;
         } else {
-            throw new BufferOverflowException();
+            _result = NetSocketSendDataBuildResult.TextOverflowError;
+            return;
         }
         
         _bytes = data;
+        _result = NetSocketSendDataBuildResult.Successful;
     }
 }

@@ -21,7 +21,6 @@ public class NetSocketAddress {
 
     public NetSocketAddress(String host, int port) {
         _port = port;
-
         try {
             _ipaddress = InetAddress.getByName(host);
             _host = host;

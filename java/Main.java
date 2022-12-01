@@ -6,6 +6,7 @@ import xyz.olooko.comm.netcomm.NetSocketReceivedDataResult;
 import xyz.olooko.comm.netcomm.NetSocketReceivedCallback;
 import xyz.olooko.comm.netcomm.NetSocketReceivedData;
 import xyz.olooko.comm.netcomm.NetSocketSendData;
+import xyz.olooko.comm.netcomm.NetSocketSendDataBuildResult;
 import xyz.olooko.comm.netcomm.NetworkComm;
 import xyz.olooko.comm.netcomm.TcpServer;
 import xyz.olooko.comm.netcomm.TcpSocket;
@@ -52,7 +53,9 @@ class TcpClientThread extends Thread {
             while (true) {
                 if (tcpsocket.isConnected()) {
                     Object[] args = new Object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                    tcpsocket.send(new NetSocketSendData((byte)0x88, args));
+                    NetSocketSendData data = new NetSocketSendData((byte)0x88, args);
+                    if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
+                        tcpsocket.send(data);
                 } else
                     break;
                 
@@ -80,7 +83,9 @@ class UdpSocketThread extends Thread {
 
             while (true) {
                 Object[] args = new Object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                udpsocket.send(new NetSocketSendData((byte)0x88, args), new NetSocketAddress("127.0.0.1", 10010));
+                NetSocketSendData data = new NetSocketSendData((byte)0x88, args);
+                if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
+                    udpsocket.send(data, new NetSocketAddress("127.0.0.1", 10010));
                 
                 try {
                     Thread.sleep(5 * 1000);

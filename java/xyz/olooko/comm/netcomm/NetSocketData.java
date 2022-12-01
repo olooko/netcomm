@@ -1,21 +1,9 @@
 package xyz.olooko.comm.netcomm;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
-
-class NetSocketDataStream extends ByteArrayOutputStream {
-
-    public byte[] getBuffer() {
-        return super.buf;
-    }
-
-    public int getCount() {
-        return super.count;
-    }
-}
 
 class NetSocketDataArgLength {
 

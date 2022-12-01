@@ -3,6 +3,7 @@ const {
 	NetSocketAddress, 
 	NetSocketSendData, 
 	NetSocketReceivedDataResult, 
+	NetSocketSendDataBuildResult,
 	TcpConnect,
 	TcpListen,
 	UdpCast 
@@ -26,7 +27,8 @@ function tcpclient_proc() {
 			setInterval(() => {
 				if (tcpsocket.isConnected()) { 
 					data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
-					tcpsocket.send(data);
+					if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
+						tcpsocket.send(data);
 				}
 			}, 5000);
 		}		
@@ -40,7 +42,8 @@ function udpsocket_proc() {
         udpsocket.setReceivedCallback(netsocketReceivedCallback);
 		setInterval(() => {
 			data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
-            udpsocket.send(data, new NetSocketAddress('127.0.0.1', 10010));
+			if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
+            	udpsocket.send(data, new NetSocketAddress('127.0.0.1', 10010));
 		}, 5000);
 	}
 }

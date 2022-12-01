@@ -256,12 +256,23 @@ class NetSocketReceivedData {
     };         
 }
 
+const NetSocketSendDataBuildResult = {
+	ByteArrayOverflowError: "bytearray-overflow-error", 
+    NoData: "no-data",
+    StringOverflowError: "string-overflow-error", 
+    Successful: "successful",
+	TextOverflowError: "text-overflow-error",
+    TypeNotImplementedError: "type-not-implemented-error"
+}
+
 class NetSocketSendData {
     #command;
     #args;
     #bytes;
+    #result;
 
 	constructor (command, args) {
+        this.#result = NetSocketSendDataBuildResult.NoData;
         this.#command = command;
         this.#args = args;
 
@@ -339,7 +350,10 @@ class NetSocketSendData {
 						text = Buffer.concat([text, buffer]);							
 					}
 					text = Buffer.concat([text, str]);
-				}
+				} else {
+                    this.#result = NetSocketSendDataBuildResult.StringOverflowError;
+                    return;
+                }
 			} else if (typeof(arg) == 'object' && Buffer.isBuffer(arg)) {
 				let argL = arg.length;
 				if (argL <= INT32_MAXVAL) {
@@ -363,8 +377,14 @@ class NetSocketSendData {
 						text = Buffer.concat([text, buffer]);							
 					}
 					text = Buffer.concat([text, arg]);
-				}
-			} 
+				} else {
+                    this.#result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                    return;
+                }
+			} else {
+                this.#result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                return;                
+            }
 		}
 	
 		let data = Buffer.alloc(0);
@@ -406,9 +426,13 @@ class NetSocketSendData {
 			data = Buffer.concat([data, Buffer.from([checksum])]);
 			// end of transmission
 			data = Buffer.concat([data, Buffer.from([0x04])]);
-		}
+		} else {
+            this.#result = NetSocketSendDataBuildResult.TextOverflowError;
+            return;
+        }
 		
         this.#bytes = data;
+        this.#result = NetSocketSendDataBuildResult.Successful;
     }
 
     getArgs = () => {
@@ -425,7 +449,11 @@ class NetSocketSendData {
 
     getLength = () => {
         return this.#bytes.length;
-    };       
+    }; 
+    
+    getBuildResult = () => {
+        return this.#result;
+    };    
 }
 
 const NetSocketProtocolType = {
@@ -444,17 +472,19 @@ class NetSocket {
     #socket;
     #protocol;
     #data;
-    #address;
+    #localAddress;
     #result;
 
 	constructor (s, protocol) {
-        const INTRPT_TM = 4000;
-
         this.#socket = s;
         this.#protocol = protocol;
         this.#data = new NetSocketData();
-        this.#address = new NetSocketAddress(s.localAddress, s.localPort);
         this.#result = NetSocketDataManipulationResult.NoData;
+
+        if (this.isAvailable())
+            this.#localAddress = new NetSocketAddress(s.localAddress, s.localPort);
+        else
+            this.#localAddress = new NetSocketAddress("0.0.0.0", 0);
     }
 
     isAvailable = () => {
@@ -462,7 +492,7 @@ class NetSocket {
     };
 
     getLocalAddress = () => {
-        return this.#address;
+        return this.#localAddress;
     };
     
     getProtocolType = () => {
@@ -470,15 +500,17 @@ class NetSocket {
     };        
 
     close = () => {
-        if (this.#protocol == NetSocketProtocolType.Tcp) {
-            this.#socket.end();
-            this.#socket.destroy();
-        } else if (this.#protocol == NetSocketProtocolType.Udp) {
-            this.#socket.close();
+        if (this.isAvailable()) {
+            if (this.#protocol == NetSocketProtocolType.Tcp) {
+                this.#socket.end();
+                this.#socket.destroy();
+            } else if (this.#protocol == NetSocketProtocolType.Udp) {
+                this.#socket.close();
+            }
         }
     };
 
-    #process = (buffer, callback, remoteAddress) => {
+    #receiveProc = (buffer, callback, remoteAddress) => {
         this.#data.append(buffer);
         while (true) {
             this.#result = this.#data.manipulate();
@@ -494,7 +526,7 @@ class NetSocket {
                     if (this.#result == NetSocketDataManipulationResult.InProgress) {
                         callback(me, new NetSocketReceivedData(0x00, [], NetSocketReceivedDataResult.Interrupted, remoteAddress));
                     }
-                }, INTRPT_TM);
+                }, 15000);
                 break;
             } else if (this.#result == NetSocketDataManipulationResult.NoData) {
                 break;				
@@ -503,20 +535,22 @@ class NetSocket {
     };
 
     setReceivedCallback = (callback) => {
-        if (this.#protocol == NetSocketProtocolType.Tcp) {
-            const remoteAddress = new NetSocketAddress(this.#socket.remoteAddress, this.#socket.remotePort);
-            this.#socket.on('data', (buffer) => {
-                this.#process(buffer, callback, remoteAddress);
-            });
-            this.#socket.on('error', () => {
-            });
-        } else if (this.#protocol == NetSocketProtocolType.Udp) {
-            this.#socket.on('message', (buffer, rinfo) => {
-                const remoteAddress = new NetSocketAddress(rinfo.address.replace('::ffff:', ''), rinfo.port);
-                this.#process(buffer, callback, remoteAddress);
-            });
-            this.#socket.on('error', () => {
-            });
+        if (this.isAvailable()) {
+            if (this.#protocol == NetSocketProtocolType.Tcp) {
+                const remoteAddress = new NetSocketAddress(this.#socket.remoteAddress, this.#socket.remotePort);
+                this.#socket.on('data', (buffer) => {
+                    this.#receiveProc(buffer, callback, remoteAddress);
+                });
+                this.#socket.on('error', () => {
+                });
+            } else if (this.#protocol == NetSocketProtocolType.Udp) {
+                this.#socket.on('message', (buffer, rinfo) => {
+                    const remoteAddress = new NetSocketAddress(rinfo.address.replace('::ffff:', ''), rinfo.port);
+                    this.#receiveProc(buffer, callback, remoteAddress);
+                });
+                this.#socket.on('error', () => {
+                });
+            }
         }   
     };       
 }
@@ -581,7 +615,9 @@ class TcpSocket extends NetSocket {
     };
 
     send = (data) => {
-        this.#socket.write(data.getBytes(), 'utf8');
+        if (this.isAvailable()) {
+            this.#socket.write(data.getBytes(), 'utf8');
+        }
     };
 }
 
@@ -595,7 +631,9 @@ class UdpSocket extends NetSocket {
     }
 
     send = (data, address) => {
-        this.#socket.send(data.getBytes(), address.getPort(), address.getHost());
+        if (this.isAvailable()) {
+            this.#socket.send(data.getBytes(), address.getPort(), address.getHost());
+        }
     };     
 }
 
@@ -634,6 +672,7 @@ module.exports = {
     NetSocketDataManipulationResult: NetSocketDataManipulationResult,
     NetSocketDataParsingStep: NetSocketDataParsingStep,
     NetSocketSendData: NetSocketSendData,
+    NetSocketSendDataBuildResult: NetSocketSendDataBuildResult,
     NetSocketProtocolType: NetSocketProtocolType,
     NetSocketReceivedDataResult: NetSocketReceivedDataResult,
     NetSocketData: NetSocketData,

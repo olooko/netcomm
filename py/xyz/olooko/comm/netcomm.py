@@ -1,12 +1,8 @@
 from enum import Enum
-#import asyncio
 import socket
 import struct
 import threading
 import time
-
-INT_MAXVAL = 2147483647
-FLOAT_MAXVAL = 3.40282347e+38
 
 
 class NetSocketDataParsingStep(Enum):
@@ -47,9 +43,9 @@ class NetSocketData:
         sz = data[0] & 0x0F
         fmt = ''
         argL = -1
-        if sz == 1: fmt = 'b'
-        elif sz == 2: fmt = 'h'
-        elif sz == 4: fmt = 'i'
+        if sz == 1: fmt = '>b'
+        elif sz == 2: fmt = '>h'
+        elif sz == 4: fmt = '>i'
         if len(data) > sz:
             argL = struct.unpack(fmt, data[1: 1 + sz])[0]
         return (sz, argL)               
@@ -99,15 +95,15 @@ class NetSocketData:
                                 sz = 0
                                 if self.__data[self.__datapos] in [0x31, 0x32, 0x34, 0x38]:
                                     sz = self.__data[self.__datapos] & 0x0F
-                                    if sz == 1: fmt = 'b'
-                                    elif sz == 2: fmt = 'h'
-                                    elif sz == 4: fmt = 'i'
-                                    elif sz == 8: fmt = 'q'
+                                    if sz == 1: fmt = '>b'
+                                    elif sz == 2: fmt = '>h'
+                                    elif sz == 4: fmt = '>i'
+                                    elif sz == 8: fmt = '>q'
                                     self.__args.append(struct.unpack(fmt, self.__data[self.__datapos + 1: self.__datapos + 1 + sz])[0])
                                 elif self.__data[self.__datapos] in [0x54, 0x58]:
                                     sz = self.__data[self.__datapos] & 0x0F
-                                    if sz == 4: fmt = 'f'
-                                    elif sz == 8: fmt = 'd'
+                                    if sz == 4: fmt = '>f'
+                                    elif sz == 8: fmt = '>d'
                                     self.__args.append(struct.unpack(fmt, self.__data[self.__datapos + 1: self.__datapos + 1 + sz])[0])
                                 elif self.__data[self.__datapos] in [0x71]:
                                     sz = 1
@@ -208,12 +204,13 @@ class NetSocketReceivedData:
 
 
 class NetSocketSendDataBuildResult(Enum):
-    ByteArrayOverflowError = 0
-    NoData = 1
-    StringOverflowError = 2 
-    Successful = 3
-    TextOverflowError = 4
-    TypeNotImplementedError = 5
+    ByteArrayLengthOverflowError = 0
+    CommandValueOverflowError = 1
+    DataTotalLengthOverflowError = 2
+    DataTypeNotImplementedError = 3
+    NoData = 4
+    StringLengthOverflowError = 5 
+    Successful = 6
 
 
 class NetSocketSendData:
@@ -238,7 +235,15 @@ class NetSocketSendData:
         return self.__result       
 
     def __init__(self, command, args):
+        ARG_MAXLEN = 0x7FFFFF - 5
+        TXT_MAXLEN = 0x7FFFFFFF - 10
+
         self.__result = NetSocketSendDataBuildResult.NoData
+
+        if command < 0 or command > 255:
+            self.__result = NetSocketSendDataBuildResult.CommandValueOverflowError
+            return
+        
         self.__command = command
         self.__args = args
         text = bytearray([command])
@@ -247,28 +252,28 @@ class NetSocketSendData:
                 if -128 <= arg and arg <= 127:
                     # 0011 0001
                     text.append(0x31)
-                    text.extend(bytearray(struct.pack('b', arg)))
+                    text.extend(bytearray(struct.pack('>b', arg)))
                 elif -32768 <= arg and arg <= 32767:
                     # 0011 0010
                     text.append(0x32)
-                    text.extend(bytearray(struct.pack('h', arg)))
+                    text.extend(bytearray(struct.pack('>h', arg)))
                 elif -2147483648 <= arg and arg <= 2147483647:
                     # 0011 0100
                     text.append(0x34)
-                    text.extend(bytearray(struct.pack('i', arg)))
+                    text.extend(bytearray(struct.pack('>i', arg)))
                 else:
                     # 0011 1000
                     text.append(0x38)
-                    text.extend(bytearray(struct.pack('q', arg)))
+                    text.extend(bytearray(struct.pack('>q', arg)))
             elif type(arg) is float:
-                if abs(arg) <= FLOAT_MAXVAL:
+                if abs(arg) <= 3.40282347e+38:
                     # 0101 0100
                     text.append(0x54) 
-                    text.extend(bytearray(struct.pack('f', arg)))
+                    text.extend(bytearray(struct.pack('>f', arg)))
                 else:
                     # 0101 1000
                     text.append(0x58) 
-                    text.extend(bytearray(struct.pack('d', arg)))
+                    text.extend(bytearray(struct.pack('>d', arg)))
             elif type(arg) is bool:
                 # 0111 0001
                 text.append(0x71) 
@@ -276,61 +281,61 @@ class NetSocketSendData:
             elif type(arg) is str:
                 arg = arg.encode('utf-8')
                 argL = len(arg)
-                if argL <= INT_MAXVAL:
-                    if argL <= 0x7F:
+                if argL <= ARG_MAXLEN:
+                    if argL <= 127:
                         # 1001 0001
                         text.append(0x91)
-                        text.extend(bytearray(struct.pack('b', argL)))
-                    elif argL <= 0x7FFF:
+                        text.extend(bytearray(struct.pack('>b', argL)))
+                    elif argL <= 32767:
                         # 1001 0010
                         text.append(0x92)
-                        text.extend(bytearray(struct.pack('h', argL)))
-                    elif argL <= 0x7FFFFFFF:
+                        text.extend(bytearray(struct.pack('>h', argL)))
+                    else:
                         # 1001 0100
                         text.append(0x94)
-                        text.extend(bytearray(struct.pack('i', argL)))
+                        text.extend(bytearray(struct.pack('>i', argL)))
                     text.extend(bytearray(arg))
                 else:
-                    self.__result = NetSocketSendDataBuildResult.StringOverflowError
+                    self.__result = NetSocketSendDataBuildResult.StringLengthOverflowError
                     return
             elif type(arg) is bytearray:
                 argL = len(arg)
-                if argL <= INT_MAXVAL:
-                    if argL <= 0x7F:
+                if argL <= ARG_MAXLEN:
+                    if argL <= 127:
                         # 1011 0001
                         text.append(0xB1)
-                        text.extend(bytearray(struct.pack('b', argL)))
-                    elif argL <= 0x7FFF:
+                        text.extend(bytearray(struct.pack('>b', argL)))
+                    elif argL <= 32767:
                         # 1011 0010
                         text.append(0xB2)
-                        text.extend(bytearray(struct.pack('h', argL)))
-                    elif argL <= 0x7FFFFFFF:
+                        text.extend(bytearray(struct.pack('>h', argL)))
+                    else:
                         # 1011 0100
                         text.append(0xB4)
-                        text.extend(bytearray(struct.pack('i', argL)))     
+                        text.extend(bytearray(struct.pack('>i', argL)))     
                     text.extend(arg)
                 else:
-                    self.__result = NetSocketSendDataBuildResult.ByteArrayOverflowError
+                    self.__result = NetSocketSendDataBuildResult.ByteArrayLengthOverflowError
                     return
             else:
-                self.__result = NetSocketSendDataBuildResult.TypeNotImplementedError
+                self.__result = NetSocketSendDataBuildResult.DataTypeNotImplementedError
                 return
         # start of header
         data = bytearray([0x01]) 
         textlen = len(text)
-        if textlen <= INT_MAXVAL:
-            if textlen <= 0x7F:
+        if textlen <= TXT_MAXLEN:
+            if textlen <= 127:
                 # 0001 0001
                 data.append(0x11) 
-                data.extend(bytearray(struct.pack('b', textlen)))
-            elif textlen <= 0x7FFF:
+                data.extend(bytearray(struct.pack('>b', textlen)))
+            elif textlen <= 32767:
                 # 0001 0010
                 data.append(0x12) 
-                data.extend(bytearray(struct.pack('h', textlen)))
-            elif textlen <= 0x7FFFFFFF:
+                data.extend(bytearray(struct.pack('>h', textlen)))
+            else:
                 # 0001 0100
                 data.append(0x14) 
-                data.extend(bytearray(struct.pack('i', textlen)))
+                data.extend(bytearray(struct.pack('>i', textlen)))
             # start of text
             data.append(0x02) 
             data.extend(text)
@@ -343,7 +348,7 @@ class NetSocketSendData:
             # end of transmission
             data.append(0x04) 
         else:
-            self.__result = NetSocketSendDataBuildResult.TextOverflowError
+            self.__result = NetSocketSendDataBuildResult.DataTotalLengthOverflowError
             return
         self.__bytes = data
         self.__result = NetSocketSendDataBuildResult.Successful
@@ -452,13 +457,18 @@ class TcpServer:
     def __init__(self, s):
         self.__server = s
 
-    def accept(self):
-        s = None
-        try:
-            s, _ = self.__server.accept()
-        except:
-            pass
-        return TcpSocket(s)
+    def setAcceptCallback(self, callback):
+        t = threading.Thread(target=self.__accept_proc, args=(callback,))
+        t.start()
+
+    def __accept_proc(self, callback):
+        while self.__server != None:
+            s = None
+            try:
+                s, _ = self.__server.accept()
+            except:
+                pass
+            callback(TcpSocket(s))
 
     def close(self):
         self.__server.close()

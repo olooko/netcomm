@@ -11,15 +11,8 @@ def tcpserver_proc():
     tcpserver = TcpListen(NetSocketAddress('127.0.0.1', 10010))
     logging.info('NetworkComm.TcpServer Started...')
 
-    while tcpserver.started:
-        tcpsocket = tcpserver.accept()
-        if tcpsocket.available:
-            logging.info('NetworkComm.TcpSocket Accepted')
-            tcpsocket.setReceivedCallback(netsocket_receivedCallback)
-        else:
-            break
-
-    logging.info('NetworkComm.TcpServer Stopped')
+    if tcpserver.started:
+        tcpserver.setAcceptCallback(tcpserver_acceptCallback)
 
 
 def tcpclient_proc():
@@ -51,6 +44,12 @@ def udpsocket_proc():
             if data.buildResult == NetSocketSendDataBuildResult.Successful:
                 udpsocket.send(data, NetSocketAddress('127.0.0.1', 10010))
             time.sleep(5)
+
+
+def tcpserver_acceptCallback(tcpsocket):
+    if tcpsocket.available:
+        logging.info('NetworkComm.TcpSocket Accepted')
+        tcpsocket.setReceivedCallback(netsocket_receivedCallback)
 
 
 def netsocket_receivedCallback(socket, data):

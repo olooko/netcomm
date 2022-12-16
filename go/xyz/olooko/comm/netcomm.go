@@ -67,9 +67,9 @@ func (d NetSocketData) getArgLength(data []byte, datalen int, datapos int) (size
 		case 1:
 			argL = int(data[datapos+1])
 		case 2:
-			argL = int(binary.LittleEndian.Uint16(data[datapos+1:]))
+			argL = int(binary.BigEndian.Uint16(data[datapos+1:]))
 		case 4:
-			argL = int(binary.LittleEndian.Uint32(data[datapos+1:]))
+			argL = int(binary.BigEndian.Uint32(data[datapos+1:]))
 		}
 	}
 	return sz, argL
@@ -138,19 +138,19 @@ func (d *NetSocketData) Manipulate() int {
 							case 1:
 								d.args = append(d.args, int8(d.data[d.datapos+1]))
 							case 2:
-								d.args = append(d.args, int16(binary.LittleEndian.Uint16(d.data[d.datapos+1:])))
+								d.args = append(d.args, int16(binary.BigEndian.Uint16(d.data[d.datapos+1:])))
 							case 4:
-								d.args = append(d.args, int32(binary.LittleEndian.Uint32(d.data[d.datapos+1:])))
+								d.args = append(d.args, int32(binary.BigEndian.Uint32(d.data[d.datapos+1:])))
 							case 8:
-								d.args = append(d.args, int64(binary.LittleEndian.Uint64(d.data[d.datapos+1:])))
+								d.args = append(d.args, int64(binary.BigEndian.Uint64(d.data[d.datapos+1:])))
 							}
 						case 0x54, 0x58:
 							sz = int(d.data[d.datapos] & 0x0F)
 							switch sz {
 							case 4:
-								d.args = append(d.args, math.Float32frombits(binary.LittleEndian.Uint32(d.data[d.datapos+1:])))
+								d.args = append(d.args, math.Float32frombits(binary.BigEndian.Uint32(d.data[d.datapos+1:])))
 							case 8:
-								d.args = append(d.args, math.Float64frombits(binary.LittleEndian.Uint64(d.data[d.datapos+1:])))
+								d.args = append(d.args, math.Float64frombits(binary.BigEndian.Uint64(d.data[d.datapos+1:])))
 							}
 						case 0x71:
 							sz = 1
@@ -308,15 +308,31 @@ func (d NetSocketSendData) GetBuildResult() int {
 }
 
 const (
-	NetSocketSendDataBuildResult_ByteArrayOverflowError = iota
+	NetSocketSendDataBuildResult_ByteArrayLengthOverflowError = iota
+	NetSocketSendDataBuildResult_CommandValueOverflowError
+	NetSocketSendDataBuildResult_DataTotalLengthOverflowError
+	NetSocketSendDataBuildResult_DataTypeNotImplementedError
 	NetSocketSendDataBuildResult_NoData
-	NetSocketSendDataBuildResult_StringOverflowError
+	NetSocketSendDataBuildResult_StringLengthOverflowError
 	NetSocketSendDataBuildResult_Successful
-	NetSocketSendDataBuildResult_TextOverflowError
-	NetSocketSendDataBuildResult_TypeNotImplementedError
+)
+
+const (
+	ARG_MAXLEN = 0x7FFFFF - 5
+	TXT_MAXLEN = math.MaxInt32 - 10
 )
 
 func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
+	senddata := NetSocketSendData{}
+	senddata.command = 0x00
+	senddata.args = make([]interface{}, 0)
+	senddata.bytes = []byte{}
+	senddata.result = NetSocketSendDataBuildResult_NoData
+
+	//if command < 0 || command > 255 {
+	//	senddata.result = NetSocketSendDataBuildResult_CommandValueOverflowError
+	//	return senddata
+	//}
 
 	text := bytes.Buffer{}
 	textlen := 0
@@ -330,29 +346,29 @@ func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
 		switch argType {
 		case "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64":
 			i, _ := strconv.ParseInt(fmt.Sprintf("%v", arg), 0, 64)
-			if -128 <= i && i <= 127 {
+			if math.MinInt8 <= i && i <= math.MaxInt8 {
 				// 0011 0001
 				text.Write([]byte{byte(0x31)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, int8(i))
+				binary.Write(&text, binary.BigEndian, int8(i))
 				textlen += 1
-			} else if -32768 <= i && i <= 32767 {
+			} else if math.MinInt16 <= i && i <= math.MaxInt16 {
 				// 0011 0010
 				text.Write([]byte{byte(0x32)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, int16(i))
+				binary.Write(&text, binary.BigEndian, int16(i))
 				textlen += 2
-			} else if -2147483648 <= i && i <= 2147483647 {
+			} else if math.MinInt32 <= i && i <= math.MaxInt32 {
 				// 0011 0100
 				text.Write([]byte{byte(0x34)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, int32(i))
+				binary.Write(&text, binary.BigEndian, int32(i))
 				textlen += 4
 			} else {
 				// 0011 1000
 				text.Write([]byte{byte(0x38)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, int64(i))
+				binary.Write(&text, binary.BigEndian, int64(i))
 				textlen += 8
 			}
 
@@ -362,80 +378,83 @@ func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
 				// 0101 0100
 				text.Write([]byte{byte(0x54)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, float32(f))
+				binary.Write(&text, binary.BigEndian, float32(f))
 				textlen += 4
 			} else {
 				// 0101 1000
 				text.Write([]byte{byte(0x58)})
 				textlen += 1
-				binary.Write(&text, binary.LittleEndian, f)
+				binary.Write(&text, binary.BigEndian, f)
 				textlen += 8
 			}
 
 		case "bool":
 			text.Write([]byte{byte(0x71)})
 			textlen += 1
-			binary.Write(&text, binary.LittleEndian, arg.(bool))
+			binary.Write(&text, binary.BigEndian, arg.(bool))
 			textlen += 1
 
 		case "string":
 			s := []byte(fmt.Sprintf("%v", arg))
-			if len(s) <= math.MaxInt32 {
-				if len(s) <= 0x7F {
+			if len(s) <= ARG_MAXLEN {
+				if len(s) <= math.MaxInt8 {
 					// 1001 0001
 					text.Write([]byte{byte(0x91)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int8(len(s)))
+					binary.Write(&text, binary.BigEndian, int8(len(s)))
 					textlen += 1
-				} else if len(s) <= 0x7FFF {
+				} else if len(s) <= math.MaxInt16 {
 					// 1001 0010
 					text.Write([]byte{byte(0x92)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int16(len(s)))
+					binary.Write(&text, binary.BigEndian, int16(len(s)))
 					textlen += 2
-				} else if len(s) <= 0x7FFFFFFF {
+				} else {
 					// 1001 0100
 					text.Write([]byte{byte(0x94)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int32(len(s)))
+					binary.Write(&text, binary.BigEndian, int32(len(s)))
 					textlen += 4
 				}
 				text.Write(s)
 				textlen += len(s)
 			} else {
-				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_StringOverflowError}
+				senddata.result = NetSocketSendDataBuildResult_StringLengthOverflowError
+				return senddata
 			}
 
 		case "[]byte", "[]uint8":
 			b := arg.([]uint8)
-			if len(b) <= math.MaxInt32 {
-				if len(b) <= 0x7F {
+			if len(b) <= ARG_MAXLEN {
+				if len(b) <= math.MaxInt8 {
 					// 1011 0001
 					text.Write([]byte{byte(0xB1)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int8(len(b)))
+					binary.Write(&text, binary.BigEndian, int8(len(b)))
 					textlen += 1
-				} else if len(b) <= 0x7FFF {
+				} else if len(b) <= math.MaxInt16 {
 					// 1011 0010
 					text.Write([]byte{byte(0xB2)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int16(len(b)))
+					binary.Write(&text, binary.BigEndian, int16(len(b)))
 					textlen += 2
-				} else if len(b) <= 0x7FFFFFFF {
+				} else {
 					// 1011 0100
 					text.Write([]byte{byte(0xB4)})
 					textlen += 1
-					binary.Write(&text, binary.LittleEndian, int32(len(b)))
+					binary.Write(&text, binary.BigEndian, int32(len(b)))
 					textlen += 4
 				}
 				text.Write(b)
 				textlen += len(b)
 			} else {
-				return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_ByteArrayOverflowError}
+				senddata.result = NetSocketSendDataBuildResult_ByteArrayLengthOverflowError
+				return senddata
 			}
 
 		default:
-			return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_TypeNotImplementedError}
+			senddata.result = NetSocketSendDataBuildResult_DataTypeNotImplementedError
+			return senddata
 		}
 	}
 
@@ -444,29 +463,29 @@ func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
 	data := bytes.Buffer{}
 	datapos := 0
 
-	if textlen <= math.MaxInt32 {
+	if textlen <= TXT_MAXLEN {
 
 		// start of header
 		data.Write([]byte{byte(0x01)})
 		datapos += 1
 
-		if textlen <= 0x7F {
+		if textlen <= math.MaxInt8 {
 			// 0001 0001
 			data.Write([]byte{byte(0x11)})
 			datapos += 1
-			binary.Write(&data, binary.LittleEndian, int8(textlen))
+			binary.Write(&data, binary.BigEndian, int8(textlen))
 			datapos += 1
-		} else if textlen <= 0x7FFF {
+		} else if textlen <= math.MaxInt16 {
 			// 0001 0010
 			data.Write([]byte{byte(0x12)})
 			datapos += 1
-			binary.Write(&data, binary.LittleEndian, int16(textlen))
+			binary.Write(&data, binary.BigEndian, int16(textlen))
 			datapos += 2
-		} else if textlen <= 0x7FFFFFFF {
+		} else {
 			// 0001 0100
 			data.Write([]byte{byte(0x14)})
 			datapos += 1
-			binary.Write(&data, binary.LittleEndian, int32(textlen))
+			binary.Write(&data, binary.BigEndian, int32(textlen))
 			datapos += 4
 		}
 
@@ -495,10 +514,15 @@ func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
 		datapos += 1
 
 	} else {
-		return NetSocketSendData{0x00, make([]interface{}, 0), []byte{}, NetSocketSendDataBuildResult_TextOverflowError}
+		senddata.result = NetSocketSendDataBuildResult_DataTotalLengthOverflowError
+		return senddata
 	}
 
-	return NetSocketSendData{command, args, data.Bytes(), NetSocketSendDataBuildResult_Successful}
+	senddata.command = command
+	senddata.args = args
+	senddata.bytes = data.Bytes()
+	senddata.result = NetSocketSendDataBuildResult_Successful
+	return senddata
 }
 
 type NetSocket struct {
@@ -506,19 +530,20 @@ type NetSocket struct {
 	packetConn   net.PacketConn
 	buffer       []byte
 	data         NetSocketData
-	protocol     int
+	protocol     int //NetSocketProtocolType
 	localAddress NetSocketAddress
 	connected    bool
-	result       int
+	result       int //NetSocketDataManipulationResult
 }
 
-func NewNetSocket(c net.Conn, p net.PacketConn, protocol int) NetSocket {
+func NewNetSocket(s interface{}, protocol int) NetSocket {
 	netsock := NetSocket{}
 	netsock.buffer = make([]byte, 4096)
 	netsock.data = NewNetSocketData()
 	netsock.protocol = protocol
 
 	if protocol == NetSocketProtocolType_Tcp {
+		c := s.(net.Conn)
 		netsock.conn = c
 		if c != nil {
 			ss := strings.Split(c.LocalAddr().String(), ":")
@@ -529,6 +554,7 @@ func NewNetSocket(c net.Conn, p net.PacketConn, protocol int) NetSocket {
 			netsock.localAddress = NewNetSocketAddress("0.0.0.0", 0)
 		}
 	} else if protocol == NetSocketProtocolType_Udp {
+		p := s.(net.PacketConn)
 		netsock.packetConn = p
 		if p != nil {
 			ss := strings.Split(p.LocalAddr().String(), ":")
@@ -679,12 +705,18 @@ func (t TcpServer) IsStarted() bool {
 	return t.server != nil
 }
 
-func (t TcpServer) Accept() TcpSocket {
-	c, err := t.server.Accept()
-	if err != nil {
-		c = nil
+func (t TcpServer) SetAcceptCallback(callback func(TcpSocket)) {
+	go t.acceptProc(callback)
+}
+
+func (t TcpServer) acceptProc(callback func(TcpSocket)) {
+	for t.server != nil {
+		c, err := t.server.Accept()
+		if err != nil {
+			c = nil
+		}
+		callback(NewTcpSocket(c))
 	}
-	return NewTcpSocket(c)
 }
 
 func (t *TcpServer) Close() {
@@ -699,7 +731,7 @@ type TcpSocket struct {
 
 func NewTcpSocket(c net.Conn) TcpSocket {
 	s := TcpSocket{}
-	s.netsock = NewNetSocket(c, nil, NetSocketProtocolType_Tcp)
+	s.netsock = NewNetSocket(c, NetSocketProtocolType_Tcp)
 	s.netsock.connected = (c != nil)
 	ss := strings.Split(c.RemoteAddr().String(), ":")
 	host := strings.Join(ss[:len(ss)-1], ":")
@@ -747,7 +779,7 @@ type UdpSocket struct {
 
 func NewUdpSocket(p net.PacketConn) UdpSocket {
 	s := UdpSocket{}
-	s.netsock = NewNetSocket(nil, p, NetSocketProtocolType_Udp)
+	s.netsock = NewNetSocket(p, NetSocketProtocolType_Udp)
 	return s
 }
 

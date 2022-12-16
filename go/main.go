@@ -19,17 +19,9 @@ func TcpServerThread() {
 	tcpserver := netcomm.TcpListen(netcomm.NewNetSocketAddress("127.0.0.1", 10010))
 	fmt.Println("NetworkComm.TcpServer Started...")
 
-	for tcpserver.IsStarted() {
-		tcpsocket := tcpserver.Accept()
-
-		if tcpsocket.IsAvailable() {
-			fmt.Println("NetworkComm.TcpSocket Accepted")
-			tcpsocket.SetReceivedCallback(NetSocketReceivedCallback)
-		} else {
-			break
-		}
+	if tcpserver.IsStarted() {
+		tcpserver.SetAcceptCallback(TcpServerAcceptCallback)
 	}
-	fmt.Println("NetworkComm.TcpServer Stopped")
 }
 
 func TcpClientThread() {
@@ -73,9 +65,22 @@ func UdpSocketThread() {
 	}
 }
 
+func TcpServerAcceptCallback(tcpsocket netcomm.TcpSocket) {
+	if tcpsocket.IsAvailable() {
+		fmt.Println("NetworkComm.TcpSocket Accepted")
+		tcpsocket.SetReceivedCallback(NetSocketReceivedCallback)
+	}
+}
+
 func NetSocketReceivedCallback(socket netcomm.NetSocket, data netcomm.NetSocketReceivedData) {
 	if data.GetResult() == netcomm.NetSocketReceivedDataResult_Completed {
-		line := fmt.Sprintf("protocol: %d, command: 0x%02X, args: {%s}", socket.GetProtocolType(), data.GetCommand(), data.GetArgs())
+		protocol := ""
+		if socket.GetProtocolType() == netcomm.NetSocketProtocolType_Tcp {
+			protocol = "Tcp"
+		} else if socket.GetProtocolType() == netcomm.NetSocketProtocolType_Udp {
+			protocol = "Udp"
+		}
+		line := fmt.Sprintf("protocol: %s, command: 0x%02X, args: {%s}", protocol, data.GetCommand(), data.GetArgs())
 		fmt.Println(line)
 	} else if data.GetResult() == netcomm.NetSocketReceivedDataResult_Interrupted {
 		fmt.Println("Interrupted")

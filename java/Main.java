@@ -9,12 +9,13 @@ import xyz.olooko.comm.netcomm.NetSocketSendData;
 import xyz.olooko.comm.netcomm.NetSocketSendDataBuildResult;
 import xyz.olooko.comm.netcomm.NetworkComm;
 import xyz.olooko.comm.netcomm.TcpServer;
+import xyz.olooko.comm.netcomm.TcpServerAcceptCallback;
 import xyz.olooko.comm.netcomm.TcpSocket;
 import xyz.olooko.comm.netcomm.UdpSocket;
 
 class TcpServerThread extends Thread {
-    private NetSocketReceivedCallback _callback;
-    public TcpServerThread(NetSocketReceivedCallback callback) {
+    private TcpServerAcceptCallback _callback;
+    public TcpServerThread(TcpServerAcceptCallback callback) {
         _callback = callback;
     }
 
@@ -23,16 +24,9 @@ class TcpServerThread extends Thread {
         TcpServer tcpserver = NetworkComm.TcpListen(new NetSocketAddress("127.0.0.1", 10010));
         System.out.println("NetworkComm.TcpServer Started...");
 
-        while (tcpserver.isStarted()) {
-            TcpSocket tcpsocket = tcpserver.accept();
-
-            if (tcpsocket.isAvailable()) {
-                System.out.println("NetworkComm.TcpSocket Accepted");
-                tcpsocket.setReceivedCallback(_callback);
-            } else
-				break;
+        if (tcpserver.isStarted()) {
+            tcpserver.setAcceptCallback(_callback);
         }
-        System.out.println("NetworkComm.TcpServer Stopped");       
     }
 }
 
@@ -98,9 +92,9 @@ class UdpSocketThread extends Thread {
 public class Main {
     public static void main(String[] args) {
 
-        NetSocketReceivedCallback callback = new NetSocketReceivedCallback() {
+        NetSocketReceivedCallback receivedCallback = new NetSocketReceivedCallback() {
             @Override
-            public void callbackMethod(NetSocket socket, NetSocketReceivedData data) {
+            public void callMethod(NetSocket socket, NetSocketReceivedData data) {
                 if (data.getResult() == NetSocketReceivedDataResult.Completed) {
                     ArrayList<String> args = new ArrayList<>();
                     for (int n = 0; n < data.getArgs().length; n++) {
@@ -131,13 +125,23 @@ public class Main {
             }
         };
 
-        TcpServerThread thread1 = new TcpServerThread(callback);
+        TcpServerAcceptCallback acceptCallback = new TcpServerAcceptCallback() {
+            @Override
+            public void callMethod(TcpSocket tcpsocket) {
+                if (tcpsocket.isAvailable()) {
+                    System.out.println("NetworkComm.TcpSocket Accepted");
+                    tcpsocket.setReceivedCallback(receivedCallback);
+                }
+            }
+        };
+
+        TcpServerThread thread1 = new TcpServerThread(acceptCallback);
         thread1.start();
 
-        TcpClientThread thread2 = new TcpClientThread(callback);
+        TcpClientThread thread2 = new TcpClientThread(receivedCallback);
         thread2.start();
 
-        UdpSocketThread thread3 = new UdpSocketThread(callback);
+        UdpSocketThread thread3 = new UdpSocketThread(receivedCallback);
         thread3.start();
 
         try {

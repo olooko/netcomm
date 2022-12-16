@@ -2,7 +2,6 @@ package xyz.olooko.comm.netcomm;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 class NetSocketDataStream extends ByteArrayOutputStream {
 
@@ -17,6 +16,9 @@ class NetSocketDataStream extends ByteArrayOutputStream {
 
 public class NetSocketSendData {
  
+    private static final int ARG_MAXLEN = 0x7FFFFF - 5;
+    private static final int TXT_MAXLEN = Integer.MAX_VALUE - 10;
+
     private Object[] _args;
     public Object[] getArgs() {
         return _args;
@@ -41,8 +43,14 @@ public class NetSocketSendData {
         return _result;
     }
 
-    public NetSocketSendData(byte command, Object[] args) {       
+    public NetSocketSendData(byte command, Object[] args) {  
         _result = NetSocketSendDataBuildResult.NoData;
+
+        //if (command < 0 || command > 255) {
+        //    _result = NetSocketSendDataBuildResult.CommandValueOverflowError;
+        //    return;
+        //}
+        
         _command = command;
         _args = args;
 
@@ -59,22 +67,22 @@ public class NetSocketSendData {
                 case "long":
                 case "integer":
                     long i = Long.valueOf(String.valueOf(arg));
-                    if (-128 <= i && i <= 127) {
+                    if (Byte.MIN_VALUE <= i && i <= Byte.MAX_VALUE) {
                         // 0011 0001
                         textds.write(new byte[] { (byte)0x31 }, 0, 1);
                         textds.write(ByteBuffer.allocate(1).put((byte)arg).array(), 0, 1);
-                    } else if (-32768 <= i && i <= 32767) {
+                    } else if (Short.MIN_VALUE <= i && i <= Short.MAX_VALUE) {
                         // 0011 0010
                         textds.write(new byte[] { (byte)0x32 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort((short)i).array(), 0, 2);
-                    } else if (-2147483648 <= i && i <= 2147483647) {
+                        textds.write(ByteBuffer.allocate(2).putShort((short)i).array(), 0, 2);
+                    } else if (Integer.MIN_VALUE <= i && i <= Integer.MAX_VALUE) {
                         // 0011 0100
                         textds.write(new byte[] { (byte)0x34 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)i).array(), 0, 4);
+                        textds.write(ByteBuffer.allocate(4).putInt((int)i).array(), 0, 4);
                     } else {
                         // 0011 1000
                         textds.write(new byte[] { (byte)0x38 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong((long)i).array(), 0, 8);
+                        textds.write(ByteBuffer.allocate(8).putLong((long)i).array(), 0, 8);
                     }
                     break;
 
@@ -84,11 +92,11 @@ public class NetSocketSendData {
                     if (Math.abs(f) <= Float.MAX_VALUE) {
                         // 0101 0100
                         textds.write(new byte[] { (byte)0x54 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat((float)f).array(), 0, 4);
+                        textds.write(ByteBuffer.allocate(4).putFloat((float)f).array(), 0, 4);
                     } else {
                         // 0101 1000
                         textds.write(new byte[] { (byte)0x58 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(f).array(), 0, 8);
+                        textds.write(ByteBuffer.allocate(8).putDouble(f).array(), 0, 8);
                     }
                     break;
                 
@@ -99,52 +107,52 @@ public class NetSocketSendData {
 
                 case "string":
                     byte[] s = ((String)arg).getBytes();
-                    if (s.length <= Integer.MAX_VALUE) {
-                        if (s.length <= 0x7F) {
+                    if (s.length <= ARG_MAXLEN) {
+                        if (s.length <= Byte.MAX_VALUE) {
                             // 1001 0001
                             textds.write(new byte[] { (byte)0x91 }, 0, 1);
                             textds.write(ByteBuffer.allocate(1).put((byte)s.length).array(), 0, 1);
-                        } else if (s.length <= 0x7FFF) {
+                        } else if (s.length <= Short.MAX_VALUE) {
                             // 1001 0010
                             textds.write(new byte[] { (byte)0x92 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort((short)s.length).array(), 0, 2);
-                        } else if (s.length <= 0x7FFFFFFF) {
+                            textds.write(ByteBuffer.allocate(2).putShort((short)s.length).array(), 0, 2);
+                        } else {
                             // 1001 0100
                             textds.write(new byte[] { (byte)0x94 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)s.length).array(), 0, 4);
+                            textds.write(ByteBuffer.allocate(4).putInt((int)s.length).array(), 0, 4);
                         }
                         textds.write(s, 0, s.length);
                     } else {
-                        _result = NetSocketSendDataBuildResult.StringOverflowError;
+                        _result = NetSocketSendDataBuildResult.StringLengthOverflowError;
                         return;
                     }
                     break;
 
                 case "byte[]":
                     byte[] b = (byte[])arg;
-                    if (b.length <= Integer.MAX_VALUE) {
-                        if (b.length <= 0x7F) {
+                    if (b.length <= ARG_MAXLEN) {
+                        if (b.length <= Byte.MAX_VALUE) {
                             // 1011 0001
                             textds.write(new byte[] { (byte)0xB1 }, 0, 1);
                             textds.write(ByteBuffer.allocate(1).put((byte)b.length).array(), 0, 1);
-                        } else if (b.length <= 0x7FFF) {
+                        } else if (b.length <= Short.MAX_VALUE) {
                             // 1011 0010
                             textds.write(new byte[] { (byte)0xB2 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort((short)b.length).array(), 0, 2);
-                        } else if (b.length <= 0x7FFFFFFF) {
+                            textds.write(ByteBuffer.allocate(2).putShort((short)b.length).array(), 0, 2);
+                        } else {
                             // 1011 0100
                             textds.write(new byte[] { (byte)0xB4 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)b.length).array(), 0, 4);
+                            textds.write(ByteBuffer.allocate(4).putInt((int)b.length).array(), 0, 4);
                         }
                         textds.write(b, 0, b.length);
                     } else {
-                        _result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                        _result = NetSocketSendDataBuildResult.ByteArrayLengthOverflowError;
                         return;
                     }
                     break;
 
                 default:
-                    _result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                    _result = NetSocketSendDataBuildResult.DataTypeNotImplementedError;
                     return;
             }
         }
@@ -152,31 +160,31 @@ public class NetSocketSendData {
         int textlen = textds.getCount();
 
         int otl = 0;
-        if (textlen <= 0x7F) otl = 2;
-        else if (textlen <= 0x7FFF) otl = 3;
-        else if (textlen <= 0x7FFFFFFF) otl = 5;
+        if (textlen <= Byte.MAX_VALUE) otl = 2;
+        else if (textlen <= Short.MAX_VALUE) otl = 3;
+        else if (textlen <= Integer.MAX_VALUE) otl = 5;
 
         //SOH(1)+OTL(v)+STX(1)+TXT(v)+ETX(1)+CHK(1)+EOT(1)
         byte[] data = new byte[1 + otl + 1 + textlen + 1 + 1 + 1];
         int datapos = 0;
 
-        if (textlen <= Integer.MAX_VALUE) {
+        if (textlen <= TXT_MAXLEN) {
 
             // start of header
             data[datapos] = 0x01; datapos += 1;
 
-            if (textlen <= 0x7F) {
+            if (textlen <= Byte.MAX_VALUE) {
                 // 0001 0001
                 data[datapos] = 0x11; datapos += 1;
                 System.arraycopy(ByteBuffer.allocate(1).put((byte)textlen).array(), 0, data, datapos, 1); datapos += 1;
-            } else if (textlen <= 0x7FFF) {
+            } else if (textlen <= Short.MAX_VALUE) {
                 // 0001 0010
                 data[datapos] = 0x12; datapos += 1;
-                System.arraycopy(ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort((short)textlen).array(), 0, data, datapos, 2); datapos += 2;
-            } else if (textlen <= 0x7FFFFFFF) {
+                System.arraycopy(ByteBuffer.allocate(2).putShort((short)textlen).array(), 0, data, datapos, 2); datapos += 2;
+            } else {
                 // 0001 0100
                 data[datapos] = 0x14; datapos += 1;
-                System.arraycopy(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((int)textlen).array(), 0, data, datapos, 4); datapos += 4;
+                System.arraycopy(ByteBuffer.allocate(4).putInt((int)textlen).array(), 0, data, datapos, 4); datapos += 4;
             }
 
             // start of text
@@ -199,7 +207,7 @@ public class NetSocketSendData {
             // end of transmission
             data[datapos] = 0x04; datapos += 1;
         } else {
-            _result = NetSocketSendDataBuildResult.TextOverflowError;
+            _result = NetSocketSendDataBuildResult.DataTotalLengthOverflowError;
             return;
         }
         

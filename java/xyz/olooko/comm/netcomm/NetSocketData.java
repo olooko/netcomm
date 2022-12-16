@@ -1,7 +1,6 @@
 package xyz.olooko.comm.netcomm;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -62,8 +61,8 @@ public class NetSocketData {
         if (datalen > sz) {
             switch (sz) {
                 case 1: argL = (int)data.get(datapos + 1); break;
-                case 2: argL = (int)data.order(ByteOrder.LITTLE_ENDIAN).getShort(datapos + 1); break;
-                case 4: argL = (int)data.order(ByteOrder.LITTLE_ENDIAN).getInt(datapos + 1); break;
+                case 2: argL = (int)data.getShort(datapos + 1); break;
+                case 4: argL = (int)data.getInt(datapos + 1); break;
             }
         }
         return new NetSocketDataArgLength(sz, argL);
@@ -138,15 +137,15 @@ public class NetSocketData {
                                         sz = (int)(_data.get(_datapos) & 0x0F);
                                         switch (sz) {
                                             case 1: _args.add((byte)_data.get(_datapos + 1)); break;
-                                            case 2: _args.add(_data.order(ByteOrder.LITTLE_ENDIAN).getShort(_datapos + 1)); break;
-                                            case 4: _args.add(_data.order(ByteOrder.LITTLE_ENDIAN).getInt(_datapos + 1)); break;
-                                            case 8: _args.add(_data.order(ByteOrder.LITTLE_ENDIAN).getLong(_datapos + 1)); break;
+                                            case 2: _args.add(_data.getShort(_datapos + 1)); break;
+                                            case 4: _args.add(_data.getInt(_datapos + 1)); break;
+                                            case 8: _args.add(_data.getLong(_datapos + 1)); break;
                                         }
                                     } else if (Arrays.asList((byte)0x54, (byte)0x58).contains(_data.get(_datapos))) {
                                         sz = (int)(_data.get(_datapos) & 0x0F);
                                         switch (sz) {
-                                            case 4: _args.add(_data.order(ByteOrder.LITTLE_ENDIAN).getFloat(_datapos + 1)); break;
-                                            case 8: _args.add(_data.order(ByteOrder.LITTLE_ENDIAN).getDouble(_datapos + 1)); break;
+                                            case 4: _args.add(_data.getFloat(_datapos + 1)); break;
+                                            case 8: _args.add(_data.getDouble(_datapos + 1)); break;
                                         }
                                     } else if (Arrays.asList((byte)0x71).contains(_data.get(_datapos))) {
                                         sz = 1;

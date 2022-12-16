@@ -33,7 +33,6 @@ namespace xyz.olooko.comm.netcomm
         private byte[] _data;
         private int _datalen;
         private int _datapos;
-
         private byte _checksum;
         private NetSocketDataParsingStep _step;
         private int _textlen;
@@ -54,7 +53,6 @@ namespace xyz.olooko.comm.netcomm
         {
             _command = 0x00;
             _args = new List<object>();
-
             _data = new byte[0];
             _datalen = 0;
             _datapos = 0;
@@ -70,11 +68,17 @@ namespace xyz.olooko.comm.netcomm
 
             if (datalen > sz) 
             {
+                byte[] buffer = new byte[sz];
+                Buffer.BlockCopy(data, datapos + 1, buffer, 0, sz);
+
+                if (BitConverter.IsLittleEndian)
+                    Array.Reverse(buffer);
+
                 switch (sz) 
                 {
-                    case 1: argL = (int)data[datapos + 1]; break;
-                    case 2: argL = (int)BitConverter.ToInt16(data, datapos + 1); break;
-                    case 4: argL = (int)BitConverter.ToInt32(data, datapos + 1); break;
+                    case 1: argL = (int)buffer[0]; break;
+                    case 2: argL = (int)BitConverter.ToInt16(buffer, 0); break;
+                    case 4: argL = (int)BitConverter.ToInt32(buffer, 0); break;
                 }
             }
 
@@ -94,6 +98,8 @@ namespace xyz.olooko.comm.netcomm
 
         public NetSocketDataManipulationResult Manipulate()
         {
+            byte[] buffer;
+
             while (true) 
             {
                 int datalen = _datalen - _datapos;
@@ -170,54 +176,74 @@ namespace xyz.olooko.comm.netcomm
                                     while (_datapos < _textlen + textfpos) 
                                     {
                                         int sz = 0;
+                                        int argL = 0;
 
                                         if ((new List<byte> { 0x31, 0x32, 0x34, 0x38 }).Contains(_data[_datapos])) 
                                         {
                                             sz = (int)(_data[_datapos] & 0x0F);
 
+                                            buffer = new byte[sz];
+                                            Buffer.BlockCopy(_data, _datapos + 1, buffer, 0, sz);
+
+                                            if (BitConverter.IsLittleEndian)
+                                                Array.Reverse(buffer);
+
                                             switch (sz) 
                                             {
-                                                case 1: _args.Add((sbyte)_data[_datapos + 1]); break;
-                                                case 2: _args.Add(BitConverter.ToInt16(_data, _datapos + 1)); break;
-                                                case 4: _args.Add(BitConverter.ToInt32(_data, _datapos + 1)); break;
-                                                case 8: _args.Add(BitConverter.ToInt64(_data, _datapos + 1)); break;
+                                                case 1: _args.Add((sbyte)buffer[0]); break;
+                                                case 2: _args.Add(BitConverter.ToInt16(buffer, 0)); break;
+                                                case 4: _args.Add(BitConverter.ToInt32(buffer, 0)); break;
+                                                case 8: _args.Add(BitConverter.ToInt64(buffer, 0)); break;
                                             }
                                         } 
                                         else if ((new List<byte> { 0x54, 0x58 }).Contains(_data[_datapos])) 
                                         {
                                             sz = (int)(_data[_datapos] & 0x0F);
-                                            
+
+                                            buffer = new byte[sz];
+                                            Buffer.BlockCopy(_data, _datapos + 1, buffer, 0, sz);
+
+                                            if (BitConverter.IsLittleEndian)
+                                                Array.Reverse(buffer);
+
                                             switch (sz) 
                                             {
-                                                case 4: _args.Add(BitConverter.ToSingle(_data, _datapos + 1)); break;
-                                                case 8: _args.Add(BitConverter.ToDouble(_data, _datapos + 1)); break;
+                                                case 4: _args.Add(BitConverter.ToSingle(buffer, 0)); break;
+                                                case 8: _args.Add(BitConverter.ToDouble(buffer, 0)); break;
                                             }
                                         } 
                                         else if ((new List<byte> { 0x71 }).Contains(_data[_datapos])) 
                                         {
                                             sz = 1;
-                                            _args.Add(BitConverter.ToBoolean(_data, _datapos + 1));
+
+                                            buffer = new byte[sz];
+                                            Buffer.BlockCopy(_data, _datapos + 1, buffer, 0, sz);
+
+                                            if (BitConverter.IsLittleEndian)
+                                                Array.Reverse(buffer);
+
+                                            _args.Add(BitConverter.ToBoolean(buffer, 0));
                                         } 
                                         else if ((new List<byte> { 0x91, 0x92, 0x94 }).Contains(_data[_datapos])) 
                                         {
                                             var a = GetArgLength(_data, datalen, _datapos);
-
-                                            _args.Add(Encoding.UTF8.GetString(_data, _datapos + 1 + a.Size, a.ArgLength));
-                                            
-                                            _datapos += a.ArgLength;
                                             sz = a.Size;
+                                            argL = a.ArgLength;
+
+                                            _args.Add(Encoding.UTF8.GetString(_data, _datapos + 1 + sz, argL));
+                                            _datapos += argL;
                                         } 
                                         else if ((new List<byte> { 0xB1, 0xB2, 0xB4 }).Contains(_data[_datapos])) 
                                         {
                                             var a = GetArgLength(_data, datalen, _datapos);
-
-                                            byte[] ba = new byte[a.ArgLength];
-
-                                            Buffer.BlockCopy(_data, _datapos + 1 + a.Size, ba, 0, a.ArgLength);
-                                            _args.Add(ba);
-                                            
-                                            _datapos += a.ArgLength;
                                             sz = a.Size;
+                                            argL = a.ArgLength;
+
+                                            byte[] ba = new byte[argL];
+                                            Buffer.BlockCopy(_data, _datapos + 1 + sz, ba, 0, argL);
+
+                                            _args.Add(ba);
+                                            _datapos += argL;
                                         } 
                                         else 
                                         {
@@ -227,6 +253,7 @@ namespace xyz.olooko.comm.netcomm
                                     }
 
                                     _checksum = 0x00;
+
                                     for (int i = textfpos; i < textfpos + _textlen; i++)
                                         _checksum ^= _data[i];
 
@@ -346,12 +373,13 @@ namespace xyz.olooko.comm.netcomm
     /// </summary>
     public enum NetSocketSendDataBuildResult
     {
-        ByteArrayOverflowError,
+        ByteArrayLengthOverflowError,
+        CommandValueOverflowError,
+        DataTotalLengthOverflowError,
+        DataTypeNotImplementedError,
         NoData,
-        StringOverflowError,
-        Successful,
-        TextOverflowError,
-        TypeNotImplementedError
+        StringLengthOverflowError,
+        Successful       
     }
 
     /// <summary>
@@ -359,6 +387,10 @@ namespace xyz.olooko.comm.netcomm
     /// </summary>
     public class NetSocketSendData
     {
+        private const int ARG_MAXLEN = 0x7FFFFF - 5;
+
+        private const int TXT_MAXLEN = int.MaxValue - 10;
+
         private object[] _args;
         public object[] Args
         {
@@ -392,14 +424,22 @@ namespace xyz.olooko.comm.netcomm
         {
             _result = NetSocketSendDataBuildResult.NoData;
 
+            //if (command < 0 || command > 255)
+            //{
+            //    _result = NetSocketSendDataBuildResult.CommandValueOverflowError;
+            //    return;
+            //}
+
             _command = command;
             _args = args;
-
             _bytes = new byte[0];
-
+            
             MemoryStream textms = new MemoryStream();
-
             textms.Write(new byte[] { command }, 0, 1);
+
+            byte[] buffer;
+
+            
 
             foreach (object arg in args)
             {
@@ -418,27 +458,44 @@ namespace xyz.olooko.comm.netcomm
 
                             if (Convert.ToInt64(sbyte.MinValue) <= i && i <= Convert.ToInt64(sbyte.MaxValue))
                             {
+                                buffer = BitConverter.GetBytes((sbyte)i);
+
                                 // 0011 0001
                                 textms.Write(new byte[] { 0x31 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes((sbyte)i), 0, 1);
+                                textms.Write(buffer, 0, 1);
                             }
                             else if (Convert.ToInt64(short.MinValue) <= i && i <= Convert.ToInt64(short.MaxValue))
                             {
+                                buffer = BitConverter.GetBytes((short)i);
+
+                                if (BitConverter.IsLittleEndian)
+                                    Array.Reverse(buffer);
+
                                 // 0011 0010
                                 textms.Write(new byte[] { 0x32 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes((short)i), 0, 2);
+                                textms.Write(buffer, 0, 2);
                             }
                             else if (Convert.ToInt64(int.MinValue) <= i && i <= Convert.ToInt64(int.MaxValue))
                             {
+                                buffer = BitConverter.GetBytes((int)i);
+
+                                if (BitConverter.IsLittleEndian)
+                                    Array.Reverse(buffer);
+
                                 // 0011 0100
                                 textms.Write(new byte[] { 0x34 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes((int)i), 0, 4);
+                                textms.Write(buffer, 0, 4);
                             }
                             else
                             {
+                                buffer = BitConverter.GetBytes(i);
+
+                                if (BitConverter.IsLittleEndian)
+                                    Array.Reverse(buffer);
+
                                 // 0011 1000
                                 textms.Write(new byte[] { 0x38 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes(i), 0, 8);
+                                textms.Write(buffer, 0, 8);
                             }
                         }
                         break;
@@ -451,15 +508,25 @@ namespace xyz.olooko.comm.netcomm
 
                             if (Math.Abs(f) <= Convert.ToDouble(float.MaxValue))
                             {
+                                buffer = BitConverter.GetBytes((float)f);
+
+                                if (BitConverter.IsLittleEndian)
+                                    Array.Reverse(buffer);
+
                                 // 0101 0100
                                 textms.Write(new byte[] { 0x54 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes((float)f), 0, 4);
+                                textms.Write(buffer, 0, 4);
                             }
                             else
                             {
+                                buffer = BitConverter.GetBytes(f);
+
+                                if (BitConverter.IsLittleEndian)
+                                    Array.Reverse(buffer);
+
                                 // 0101 1000
                                 textms.Write(new byte[] { 0x58 }, 0, 1);
-                                textms.Write(BitConverter.GetBytes(f), 0, 8);
+                                textms.Write(buffer, 0, 8);
                             }
                         }
                         break;
@@ -473,32 +540,44 @@ namespace xyz.olooko.comm.netcomm
                         {
                             byte[] s = Encoding.UTF8.GetBytes(Convert.ToString(arg));
 
-                            if (s.Length <= int.MaxValue)
+                            if (s.Length <= ARG_MAXLEN)
                             {
-                                if (s.Length <= 0x7F)
+                                if (s.Length <= sbyte.MaxValue)
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToSByte(s.Length));
+
                                     // 1001 0001
                                     textms.Write(new byte[] { 0x91 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToSByte(s.Length)), 0, 1);
+                                    textms.Write(buffer, 0, 1);
                                 }
-                                else if (s.Length <= 0x7FFF)
+                                else if (s.Length <= short.MaxValue)
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToInt16(s.Length));
+
+                                    if (BitConverter.IsLittleEndian)
+                                        Array.Reverse(buffer);
+
                                     // 1001 0010
                                     textms.Write(new byte[] { 0x92 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToInt16(s.Length)), 0, 2);
+                                    textms.Write(buffer, 0, 2);
                                 }
-                                else if (s.Length <= 0x7FFFFFFF)
+                                else
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToInt32(s.Length));
+
+                                    if (BitConverter.IsLittleEndian)
+                                        Array.Reverse(buffer);
+
                                     // 1001 0100
                                     textms.Write(new byte[] { 0x94 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToInt32(s.Length)), 0, 4);
+                                    textms.Write(buffer, 0, 4);
                                 }
 
                                 textms.Write(s, 0, s.Length);
                             }
                             else
                             {
-                                _result = NetSocketSendDataBuildResult.StringOverflowError;
+                                _result = NetSocketSendDataBuildResult.StringLengthOverflowError;
                                 return;
                             }
                         }
@@ -508,39 +587,51 @@ namespace xyz.olooko.comm.netcomm
                         {
                             byte[] b = (byte[])arg;
 
-                            if (b.Length <= int.MaxValue)
+                            if (b.Length <= ARG_MAXLEN)
                             {
-                                if (b.Length <= 0x7F)
+                                if (b.Length <= sbyte.MaxValue)
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToSByte(b.Length));
+
                                     // 1011 0001
                                     textms.Write(new byte[] { 0xB1 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToSByte(b.Length)), 0, 1);
+                                    textms.Write(buffer, 0, 1);
                                 }
-                                else if (b.Length <= 0x7FFF)
+                                else if (b.Length <= short.MaxValue)
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToInt16(b.Length));
+
+                                    if (BitConverter.IsLittleEndian)
+                                        Array.Reverse(buffer);
+
                                     // 1011 0010
                                     textms.Write(new byte[] { 0xB2 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToInt16(b.Length)), 0, 2);
+                                    textms.Write(buffer, 0, 2);
                                 }
-                                else if (b.Length <= 0x7FFFFFFF)
+                                else
                                 {
+                                    buffer = BitConverter.GetBytes(Convert.ToInt32(b.Length));
+
+                                    if (BitConverter.IsLittleEndian)
+                                        Array.Reverse(buffer);
+
                                     // 1011 0100
                                     textms.Write(new byte[] { 0xB4 }, 0, 1);
-                                    textms.Write(BitConverter.GetBytes(Convert.ToInt32(b.Length)), 0, 4);
+                                    textms.Write(buffer, 0, 4);
                                 }
 
                                 textms.Write(b, 0, b.Length);
                             }
                             else
                             {
-                                _result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                                _result = NetSocketSendDataBuildResult.ByteArrayLengthOverflowError;
                                 return;
                             }
                         }
                         break;
 
                     default:
-                        _result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                        _result = NetSocketSendDataBuildResult.DataTypeNotImplementedError;
                         return;
                 }
             }
@@ -548,36 +639,48 @@ namespace xyz.olooko.comm.netcomm
             int textlen = (int)textms.Position;
 
             int otl = 0;
-            if (textlen <= 0x7F) otl = 2;
-            else if (textlen <= 0x7FFF) otl = 3;
-            else if (textlen <= 0x7FFFFFFF) otl = 5;
+            if (textlen <= sbyte.MaxValue) otl = 2;
+            else if (textlen <= short.MaxValue) otl = 3;
+            else if (textlen <= int.MaxValue) otl = 5;
 
             //SOH(1)+OTL(v)+STX(1)+TXT(v)+ETX(1)+CHK(1)+EOT(1)
             byte[] data = new byte[1 + otl + 1 + textlen + 1 + 1 + 1];
             int datapos = 0;
 
-            if (textlen <= int.MaxValue)
+            if (textlen <= TXT_MAXLEN)
             {
                 // start of header
                 data[datapos] = 0x01; datapos += 1;
 
-                if (textlen <= 0x7F)
+                if (textlen <= sbyte.MaxValue)
                 {
+                    buffer = BitConverter.GetBytes(Convert.ToSByte(textlen));
+
                     // 0001 0001
                     data[datapos] = 0x11; datapos += 1;
-                    Buffer.BlockCopy(BitConverter.GetBytes(Convert.ToSByte(textlen)), 0, data, datapos, 1); datapos += 1;
+                    Buffer.BlockCopy(buffer, 0, data, datapos, 1); datapos += 1;
                 }
-                else if (textlen <= 0x7FFF)
+                else if (textlen <= short.MaxValue)
                 {
+                    buffer = BitConverter.GetBytes(Convert.ToInt16(textlen));
+
+                    if (BitConverter.IsLittleEndian)
+                        Array.Reverse(buffer);
+
                     // 0001 0010
                     data[datapos] = 0x12; datapos += 1;
-                    Buffer.BlockCopy(BitConverter.GetBytes(Convert.ToInt16(textlen)), 0, data, datapos, 2); datapos += 2;
+                    Buffer.BlockCopy(buffer, 0, data, datapos, 2); datapos += 2;
                 }
-                else if (textlen <= 0x7FFFFFFF)
+                else
                 {
+                    buffer = BitConverter.GetBytes(Convert.ToInt32(textlen));
+
+                    if (BitConverter.IsLittleEndian)
+                        Array.Reverse(buffer);
+
                     // 0001 0100
                     data[datapos] = 0x14; datapos += 1;
-                    Buffer.BlockCopy(BitConverter.GetBytes(Convert.ToInt32(textlen)), 0, data, datapos, 4); datapos += 4;
+                    Buffer.BlockCopy(buffer, 0, data, datapos, 4); datapos += 4;
                 }
 
                 // start of text
@@ -599,14 +702,15 @@ namespace xyz.olooko.comm.netcomm
                 data[datapos] = checksum; datapos += 1;
 
                 // end of transmission
-                data[datapos] = 0x04; datapos += 1;
+                data[datapos] = 0x04; 
+                //datapos += 1;
 
                 textms.Close();
             }
             else
             {
                 textms.Close();
-                _result = NetSocketSendDataBuildResult.TextOverflowError;
+                _result = NetSocketSendDataBuildResult.DataTotalLengthOverflowError;
                 return;
             }
 
@@ -688,9 +792,10 @@ namespace xyz.olooko.comm.netcomm
     {
         private byte[] _buffer;
         private NetSocketData _data;
-        private Socket _socket;
 
-        NetSocketDataManipulationResult _result;
+        protected Socket _socket;
+
+        private NetSocketDataManipulationResult _result;
 
         public bool Available 
         {
@@ -855,15 +960,29 @@ namespace xyz.olooko.comm.netcomm
             _server = s; 
         }
 
-        public TcpSocket Accept() 
+        public void SetAcceptCallback(Action<TcpSocket> callback)
         {
-            Socket s = null;
-            try
+            Thread t = new Thread(new ParameterizedThreadStart(AcceptProc));
+            t.IsBackground = true;
+            t.Start(callback);
+        }
+
+        private void AcceptProc(object state)
+        {
+            if (state == null) return;
+            Action<TcpSocket> callback = (Action<TcpSocket>)state;
+
+            while (_server != null)
             {
-                s = _server.Accept();
+                Socket s = null;
+                try
+                {
+                    s = _server.Accept();
+                }
+                catch { }
+
+                callback(new TcpSocket(s));
             }
-            catch { }
-            return new TcpSocket(s);
         }
 
         public void Close()
@@ -878,8 +997,6 @@ namespace xyz.olooko.comm.netcomm
     /// </summary>
     public class TcpSocket : NetSocket 
     {
-        private Socket _socket;
-
         public bool Connected
         {
             get { return Available && _socket.Connected; }
@@ -894,8 +1011,6 @@ namespace xyz.olooko.comm.netcomm
         public TcpSocket(Socket s)
             : base(s, NetSocketProtocolType.Tcp) 
         {
-            _socket = s;
-
             IPEndPoint iep = s.RemoteEndPoint as IPEndPoint;
             _remoteAddress = new NetSocketAddress(iep.Address, iep.Port);
         }

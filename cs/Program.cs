@@ -33,20 +33,8 @@ namespace xyz.olooko.comm
             TcpServer tcpserver = NetworkComm.TcpListen(new NetSocketAddress("127.0.0.1", 10010));
             Console.WriteLine("NetworkComm.TcpServer Started...");
 
-            while (tcpserver.Started)
-            {
-                TcpSocket tcpsocket = tcpserver.Accept();
-
-                if (tcpsocket.Available)
-                {
-                    Console.WriteLine("NetworkComm.TcpSocket Accepted");
-                    tcpsocket.SetReceivedCallback(NetSocketReceivedCallback);
-                }
-                else
-                    break;
-            }
-
-            Console.WriteLine("NetworkComm.TcpServer Stopped");
+            if (tcpserver.Started)
+                tcpserver.SetAcceptCallback(TcpServerAcceptCallback);
         }
 
         static void TcpClientProc() 
@@ -95,6 +83,15 @@ namespace xyz.olooko.comm
 
                     Thread.Sleep(5 * 1000);
                 }
+            }
+        }
+
+        static void TcpServerAcceptCallback(TcpSocket tcpsocket)
+        {
+            if (tcpsocket.Available)
+            {
+                Console.WriteLine("NetworkComm.TcpSocket Accepted");
+                tcpsocket.SetReceivedCallback(NetSocketReceivedCallback);
             }
         }
 

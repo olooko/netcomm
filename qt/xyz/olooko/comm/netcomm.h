@@ -59,12 +59,13 @@ private:
 
 enum class NetSocketSendDataBuildResult
 {
-	ByteArrayOverflowError,
+    ByteArrayLengthOverflowError,
+    CommandValueOverflowError,
+    DataTotalLengthOverflowError,
+    DataTypeNotImplementedError,
     NoData,
-    StringOverflowError,
-    Successful,
-	TextOverflowError,
-    TypeNotImplementedError
+    StringLengthOverflowError,
+    Successful
 };
 
 class NetSocketSendData
@@ -79,6 +80,9 @@ public:
     qsizetype getLength();
 
 private:
+    const int ARG_MAXLEN = 0x7FFFFF - 5;
+    const int TXT_MAXLEN = 0x7FFFFFFF - 10;
+
     quint8 _command;
     QList<QVariant> _args;
 
@@ -120,7 +124,6 @@ typedef void(*NetSocketReceivedCallback)(NetSocket*, NetSocketReceivedData);
 class NetSocket : public QThread
 {
     Q_OBJECT
-
 public:
     NetSocket(QAbstractSocket* s, NetSocketProtocolType protocol);
 
@@ -135,8 +138,9 @@ protected:
     void run() override;
     virtual void send(NetSocketSendData data, NetSocketAddress address);
 
-private:
     QAbstractSocket* _socket;
+
+private:
     NetSocketProtocolType _protocol;
     NetSocketDataManipulationResult _result;
     NetSocketReceivedCallback _callback;
@@ -159,23 +163,27 @@ public:
     NetSocketAddress getRemoteAddress();
 
     void send(NetSocketSendData data);
-
-private:
-    QAbstractSocket* _socket;
 };
 
-class TcpServer
+class TcpSocket;
+typedef void(*TcpServerAcceptCallback)(TcpSocket*);
+
+class TcpServer : public QThread
 {
 public:
     TcpServer(QTcpServer* s);
 
-    TcpSocket* accept();
+    void setAcceptCallback(TcpServerAcceptCallback callback);
     void close();
 
     bool isStarted();
 
+protected:
+    void run() override;
+
 private:
     QTcpServer* _server;
+    TcpServerAcceptCallback _callback;
 };
 
 class UdpSocket : public NetSocket

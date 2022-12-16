@@ -13,7 +13,7 @@ void NetSocketReceived(NetSocket* socket, NetSocketReceivedData data)
         quint8 command = data.getCommand();
         QList<QVariant> args = data.getArgs();
 
-        qInfo() << (qint32)protocol << command << args;
+        qInfo() << ((protocol == NetSocketProtocolType::Tcp) ? "Tcp" : "Udp") << command << args;
     }
     else if (data.getResult() == NetSocketReceivedDataResult::Interrupted)
     {
@@ -30,6 +30,15 @@ void NetSocketReceived(NetSocket* socket, NetSocketReceivedData data)
     }
 }
 
+void TcpServerAccept(TcpSocket* tcpsocket)
+{
+    if (tcpsocket->isAvailable())
+    {
+        qInfo() << "NetworkComm.TcpSocket Accepted";
+        tcpsocket->setReceivedCallback(NetSocketReceived);
+    }
+}
+
 void TcpServerThread()
 {
     NetSocketAddress address("127.0.0.1", 10010);
@@ -37,20 +46,10 @@ void TcpServerThread()
     TcpServer* tcpserver = TcpListen(address);
     qInfo() << "NetworkComm.TcpServer Started...";
 
-    while (tcpserver->isStarted())
+    if (tcpserver->isStarted())
     {
-        TcpSocket* tcpsocket = tcpserver->accept();
-
-        if (tcpsocket->isAvailable())
-        {
-            qInfo() << "NetworkComm.TcpSocket Accepted";
-            tcpsocket->setReceivedCallback(NetSocketReceived);
-        }
-        else
-            break;
+        tcpserver->setAcceptCallback(TcpServerAccept);
     }
-
-    qInfo() << "NetworkComm.TcpServer Stopped";
 }
 
 void TcpClientThread()

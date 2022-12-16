@@ -64,6 +64,12 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
 {
     _result = NetSocketSendDataBuildResult::NoData;
 
+    if (command < 0 || command > 255)
+    {
+        _result = NetSocketSendDataBuildResult::CommandValueOverflowError;
+        return;
+    }
+
     _command = command;
     _args = args;
 
@@ -96,25 +102,26 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
                 {
                     // 0011 0001
                     textds << (quint8)0x31;
-                    textds << (qint8)i;
+                    textds << qToBigEndian((qint8)i);
                 }
                 else if (std::numeric_limits<qint16>::min() <= i && i <= std::numeric_limits<qint16>::max())
                 {
                     // 0011 0010
                     textds << (quint8)0x32;
-                    textds << (qint16)i;
+                    textds << qToBigEndian((qint16)i);
+
                 }
                 else if (std::numeric_limits<qint32>::min() <= i && i <= std::numeric_limits<qint32>::max())
                 {
                     // 0011 0100
                     textds << (quint8)0x34;
-                    textds << (qint32)i;
+                    textds << qToBigEndian((qint32)i);
                 }
                 else
                 {
                     // 0011 1000
                     textds << 0x38;
-                    textds << i;
+                    textds << qToBigEndian(i);
                 }
             }
             break;
@@ -129,53 +136,53 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
                     // 0101 0100
                     textds << (quint8)0x54;
                     textds.setFloatingPointPrecision(QDataStream::SinglePrecision);
-                    textds << f;
+                    textds << qToBigEndian((float)f);
                 }
                 else
                 {
                     // 0101 1000
                     textds << (quint8)0x58;
                     textds.setFloatingPointPrecision(QDataStream::QDataStream::DoublePrecision);
-                    textds << f;
+                    textds << qToBigEndian(f);
                 }
             }
             break;
 
         case QMetaType::Bool:
             textds << (quint8)0x71;
-            textds << arg.toBool();
+            textds << qToBigEndian(arg.toBool());
             break;
 
         case QMetaType::QString:
             {
                 QByteArray s = arg.toString().toUtf8();
 
-                if (s.length() <= std::numeric_limits<qint32>::max())
+                if (s.length() <= ARG_MAXLEN)
                 {
-                    if (s.length() <= 0x7F)
+                    if (s.length() <= std::numeric_limits<qint8>::max())
                     {
                         // 1001 0001
                         textds << (quint8)0x91;
-                        textds << (qint8)s.length();
+                        textds << qToBigEndian((qint8)s.length());
                     }
-                    else if (s.length() <= 0x7FFF)
+                    else if (s.length() <= std::numeric_limits<qint16>::max())
                     {
                         // 1001 0010
                         textds << (quint8)0x92;
-                        textds << (qint16)s.length();
+                        textds << qToBigEndian((qint16)s.length());
                     }
-                    else if (s.length() <= 0x7FFFFFFF)
+                    else
                     {
                         // 1001 0100
                         textds << (quint8)0x94;
-                        textds << (qint32)s.length();
+                        textds << qToBigEndian((qint32)s.length());
                     }
 
                     textds.writeRawData(s.constData(), s.length());
                 }
                 else
                 {
-                    _result = NetSocketSendDataBuildResult::StringOverflowError;
+                    _result = NetSocketSendDataBuildResult::StringLengthOverflowError;
                     return;
                 }
             }
@@ -185,39 +192,39 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
             {
                 QByteArray b = arg.toByteArray();
 
-                if (b.length() <= std::numeric_limits<qint32>::max())
+                if (b.length() <= ARG_MAXLEN)
                 {
-                    if (b.length() <= 0x7F)
+                    if (b.length() <= std::numeric_limits<qint8>::max())
                     {
                         // 1011 0001
                         textds << (quint8)0xB1;
-                        textds << (qint8)b.length();
+                        textds << qToBigEndian((qint8)b.length());
                     }
-                    else if (b.length() <= 0x7FFF)
+                    else if (b.length() <= std::numeric_limits<qint16>::max())
                     {
                         // 1011 0010
                         textds << (quint8)0xB2;
-                        textds << (qint16)b.length();
+                        textds << qToBigEndian((qint16)b.length());
                     }
-                    else if (b.length() <= 0x7FFFFFFF)
+                    else
                     {
                         // 1011 0100
                         textds << (quint8)0xB4;
-                        textds << (qint32)b.length();
+                        textds << qToBigEndian((qint32)b.length());
                     }
 
                     textds.writeRawData(b.constData(), b.length());
                 }
                 else
                 {
-                    _result = NetSocketSendDataBuildResult::ByteArrayOverflowError;
+                    _result = NetSocketSendDataBuildResult::ByteArrayLengthOverflowError;
                     return;
                 }
             }
             break;
 
         default:
-            _result = NetSocketSendDataBuildResult::TypeNotImplementedError;
+            _result = NetSocketSendDataBuildResult::DataTypeNotImplementedError;
             return;
         }
     }
@@ -227,28 +234,28 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
     QByteArray data;
     QDataStream datads(&data, QIODevice::ReadWrite);
 
-    if (textlen <= std::numeric_limits<qint32>::max())
+    if (textlen <= TXT_MAXLEN)
     {
         // start of header
         datads << (quint8)0x01;
 
-        if (textlen <= 0x7F)
+        if (textlen <= std::numeric_limits<qint8>::max())
         {
             // 0001 0001
             datads << (quint8)0x11;
-            datads << (qint8)textlen;
+            datads << qToBigEndian((qint8)textlen);
         }
-        else if (textlen <= 0x7FFF)
+        else if (textlen <= std::numeric_limits<qint16>::max())
         {
             // 0001 0010
             datads << (quint8)0x12;
-            datads << (qint16)textlen;
+            datads << qToBigEndian((qint16)textlen);
         }
-        else if (textlen <= 0x7FFFFFFF)
+        else
         {
             // 0001 0100
             datads << (quint8)0x14;
-            datads << (qint32)textlen;
+            datads << qToBigEndian((qint32)textlen);
         }
 
         // start of text
@@ -271,7 +278,7 @@ NetSocketSendData::NetSocketSendData(quint8 command, QList<QVariant> args)
     }
     else
     {
-        _result = NetSocketSendDataBuildResult::TextOverflowError;
+        _result = NetSocketSendDataBuildResult::DataTotalLengthOverflowError;
         return;
     }
 
@@ -325,8 +332,8 @@ QPair<qsizetype, qsizetype> NetSocketData::getArgLength(QByteArray data, qsizety
         switch (sz)
         {
             case 1: argL = (qint8)data[datapos + 1]; break;
-            case 2: argL = qFromLittleEndian<qint16>(data.constData() + datapos + 1); break;
-            case 4: argL = qFromLittleEndian<qint32>(data.constData() + datapos + 1); break;
+            case 2: argL = qFromBigEndian<qint16>(data.constData() + datapos + 1); break;
+            case 4: argL = qFromBigEndian<qint32>(data.constData() + datapos + 1); break;
         }
     }
 
@@ -427,9 +434,9 @@ NetSocketDataManipulationResult NetSocketData::manipulate()
                                     switch (sz)
                                     {
                                         case 1: _args.append((qint8)_data[_datapos + 1]); break;
-                                        case 2: _args.append(qFromLittleEndian<qint16>(_data.constData() + _datapos + 1)); break;
-                                        case 4: _args.append(qFromLittleEndian<qint32>(_data.constData() + _datapos + 1)); break;
-                                        case 8: _args.append(qFromLittleEndian<qint64>(_data.constData() + _datapos + 1)); break;
+                                        case 2: _args.append(qFromBigEndian<qint16>(_data.constData() + _datapos + 1)); break;
+                                        case 4: _args.append(qFromBigEndian<qint32>(_data.constData() + _datapos + 1)); break;
+                                        case 8: _args.append(qFromBigEndian<qint64>(_data.constData() + _datapos + 1)); break;
                                     }
                                 }
                                 else if (list_f.contains((quint8)_data[_datapos]))
@@ -438,8 +445,8 @@ NetSocketDataManipulationResult NetSocketData::manipulate()
 
                                     switch (sz)
                                     {
-                                        case 4: _args.append(qFromLittleEndian<float>(_data.constData() + _datapos + 1)); break;
-                                        case 8: _args.append(qFromLittleEndian<double>(_data.constData() + _datapos + 1)); break;
+                                        case 4: _args.append(qFromBigEndian<float>(_data.constData() + _datapos + 1)); break;
+                                        case 8: _args.append(qFromBigEndian<double>(_data.constData() + _datapos + 1)); break;
                                     }
                                 }
                                 else if (list_b.contains((quint8)_data[_datapos]))
@@ -537,7 +544,6 @@ NetSocketDataManipulationResult NetSocketData::manipulate()
 
         return NetSocketDataManipulationResult::InProgress;
     }
-
 }
 
 QList<QVariant> NetSocketData::getArgs()
@@ -550,13 +556,14 @@ quint8 NetSocketData::getCommand()
     return _command;
 }
 
-
 NetSocket::NetSocket(QAbstractSocket* s, NetSocketProtocolType protocol)
 {
     _socket = s;
     _protocol = protocol;
-
     _buffer = new char[4096];
+
+    _socket->setParent(nullptr);
+    _socket->moveToThread(this);
 }
 
 bool NetSocket::isAvailable()
@@ -719,20 +726,34 @@ void NetSocket::sendProc(NetSocketSendData data, NetSocketAddress address, int b
 TcpServer::TcpServer(QTcpServer* s)
 {
     _server = s;
+    _server->moveToThread(this);
 }
 
-TcpSocket* TcpServer::accept()
+void TcpServer::setAcceptCallback(TcpServerAcceptCallback callback)
 {
-    QTcpSocket* s = nullptr;
-    try
+    _callback = callback;
+    start();
+}
+
+void TcpServer::run()
+{
+    while (_server != nullptr)
     {
-        if (_server->waitForNewConnection())
+        QTcpSocket* s = nullptr;
+        try
         {
-            s = _server->nextPendingConnection();
+            if (_server->waitForNewConnection(-1))
+            {
+                if (_server->hasPendingConnections())
+                {
+                    s = _server->nextPendingConnection();
+                }
+            }
         }
+        catch (...) { }
+
+        _callback(new TcpSocket(s));
     }
-    catch (...) { }
-    return new TcpSocket(s);
 }
 
 void TcpServer::close()
@@ -746,10 +767,8 @@ bool TcpServer::isStarted()
     return _server != nullptr;
 }
 
-
 TcpSocket::TcpSocket(QAbstractSocket* s) : NetSocket(s, NetSocketProtocolType::Tcp)
 {
-    _socket = s;
 }
 
 bool TcpSocket::isConnected()
@@ -770,7 +789,6 @@ void TcpSocket::send(NetSocketSendData data)
 
 UdpSocket::UdpSocket(QAbstractSocket* s) : NetSocket(s, NetSocketProtocolType::Udp)
 {
-
 }
 
 void UdpSocket::send(NetSocketSendData data, NetSocketAddress address)

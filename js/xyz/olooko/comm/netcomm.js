@@ -1,9 +1,6 @@
 const net = require('net');
 const dgram = require('dgram');
 
-const INT32_MAXVAL = 2147483647;
-const FLOAT_MAXVAL = 3.40282347e+38;
-
 class NetSocketAddress {
     #host;
     #port;
@@ -59,10 +56,10 @@ class NetSocketData {
                     argL = data.readInt8(datapos + 1);
                     break;
                 case 2:
-                    argL = data.readInt16LE(datapos + 1);
+                    argL = data.readInt16BE(datapos + 1);
                     break;
                 case 4:
-                    argL = data.readInt32LE(datapos + 1);
+                    argL = data.readInt32BE(datapos + 1);
                     break;					
             }
         }
@@ -140,20 +137,20 @@ class NetSocketData {
                                         this.#args.push(this.#data.readInt8(this.#datapos + 1));
                                         break;
                                     case 2:
-                                        this.#args.push(this.#data.readInt16LE(this.#datapos + 1));
+                                        this.#args.push(this.#data.readInt16BE(this.#datapos + 1));
                                         break;
                                     case 4:
-                                        this.#args.push(this.#data.readInt32LE(this.#datapos + 1));
+                                        this.#args.push(this.#data.readInt32BE(this.#datapos + 1));
                                         break;					
                                     }
                                 } else if ([0x54, 0x58].includes(this.#data[this.#datapos])) {
                                     sz = this.#data[this.#datapos] & 0x0F;
                                     switch (sz) {
                                     case 4:
-                                        this.#args.push(this.#data.readFloatLE(this.#datapos + 1));
+                                        this.#args.push(this.#data.readFloatBE(this.#datapos + 1));
                                         break;
                                     case 8:
-                                        this.#args.push(this.#data.readDoubleLE(this.#datapos + 1));
+                                        this.#args.push(this.#data.readDoubleBE(this.#datapos + 1));
                                         break;				
                                     }
                                 } else if ([0x71].includes(this.#data[this.#datapos])) {
@@ -257,12 +254,13 @@ class NetSocketReceivedData {
 }
 
 const NetSocketSendDataBuildResult = {
-	ByteArrayOverflowError: "bytearray-overflow-error", 
+    ByteArrayLengthOverflowError: "bytearray-length-overflow-error", 
+    CommandValueOverflowError: "command-value-overflow-error",
+	DataTotalLengthOverflowError: "data-totallength-overflow-error",
+    DataTypeNotImplementedError: "datatype-not-implemented-error",
     NoData: "no-data",
-    StringOverflowError: "string-overflow-error", 
+    StringLengthOverflowError: "string-length-overflow-error", 
     Successful: "successful",
-	TextOverflowError: "text-overflow-error",
-    TypeNotImplementedError: "type-not-implemented-error"
 }
 
 class NetSocketSendData {
@@ -272,7 +270,16 @@ class NetSocketSendData {
     #result;
 
 	constructor (command, args) {
+        const ARG_MAXLEN = 0x7FFFFF - 5;
+        const TXT_MAXLEN = 0x7FFFFFFF - 10;
+
         this.#result = NetSocketSendDataBuildResult.NoData;
+
+        if (command < 0 || command > 255) {
+            this.#result = NetSocketSendDataBuildResult.CommandValueOverflowError;
+            return;
+        }
+        
         this.#command = command;
         this.#args = args;
 
@@ -293,33 +300,33 @@ class NetSocketSendData {
 					// 0011 0010
 					text = Buffer.concat([text, Buffer.from([0x32])]);
 					buffer = Buffer.alloc(2);
-					buffer.writeInt16LE(arg);
+					buffer.writeInt16BE(arg);
 					text = Buffer.concat([text, buffer]);
 				} else if (-2147483648 <= arg && arg <= 2147483647) {
 					// 0011 0100
 					text = Buffer.concat([text, Buffer.from([0x34])]);
 					buffer = Buffer.alloc(4);
-					buffer.writeInt32LE(arg);
+					buffer.writeInt32BE(arg);
 					text = Buffer.concat([text, buffer]);
 				} else {
 					// 0011 1000
 					text = Buffer.concat([text, Buffer.from([0x38])]);
 					buffer = Buffer.alloc(8);
-					buffer.writeInt64LE(arg);
+					buffer.writeInt64BE(arg);
 					text = Buffer.concat([text, buffer]);					
 				}
 			} else if (typeof(arg) == 'number' && !Number.isInteger(arg)) {
-				if (Math.abs(arg) <= FLOAT_MAXVAL) {
+				if (Math.abs(arg) <= 3.40282347e+38) {
 					// 0101 0100
 					text = Buffer.concat([text, Buffer.from([0x54])]);
 					buffer = Buffer.alloc(4);
-					buffer.writeFloatLE(arg);
+					buffer.writeFloatBE(arg);
 					text = Buffer.concat([text, buffer]);					
 				} else {
 					// 0101 1000
 					text = Buffer.concat([text, Buffer.from([0x58])]);
 					buffer = Buffer.alloc(8);
-					buffer.writeDoubleLE(arg);
+					buffer.writeDoubleBE(arg);
 					text = Buffer.concat([text, buffer]);					
 				}
 			} else if (typeof(arg) == 'boolean') {
@@ -329,60 +336,60 @@ class NetSocketSendData {
 			} else if (typeof(arg) == 'string') {
 				let str = Buffer.from(arg, 'utf8');
 				let argL = arg.length;
-				if (argL <= INT32_MAXVAL) {
-					if (argL <= 0x7F) {
+				if (argL <= ARG_MAXLEN) {
+					if (argL <= 127) {
 						// 1001 0001
 						text = Buffer.concat([text, Buffer.from([0x91])]);
 						buffer = Buffer.alloc(1);
 						buffer.writeInt8(argL);
 						text = Buffer.concat([text, buffer]);						
-					} else if (argL <= 0x7FFF) {
+					} else if (argL <= 32767) {
 						// 1001 0010
 						text = Buffer.concat([text, Buffer.from([0x92])]);
 						buffer = Buffer.alloc(2);
-						buffer.writeInt16LE(argL);
+						buffer.writeInt16BE(argL);
 						text = Buffer.concat([text, buffer]);	
-					} else if (argL <= 0x7FFFFFFF) {
+					} else {
 						// 1001 0100
 						text = Buffer.concat([text, Buffer.from([0x94])]);
 						buffer = Buffer.alloc(4);
-						buffer.writeInt32LE(argL);
+						buffer.writeInt32BE(argL);
 						text = Buffer.concat([text, buffer]);							
 					}
 					text = Buffer.concat([text, str]);
 				} else {
-                    this.#result = NetSocketSendDataBuildResult.StringOverflowError;
+                    this.#result = NetSocketSendDataBuildResult.StringLengthOverflowError;
                     return;
                 }
 			} else if (typeof(arg) == 'object' && Buffer.isBuffer(arg)) {
 				let argL = arg.length;
-				if (argL <= INT32_MAXVAL) {
-					if (argL <= 0x7F) {
+				if (argL <= ARG_MAXLEN) {
+					if (argL <= 127) {
 						// 1011 0001
 						text = Buffer.concat([text, Buffer.from([0xB1])]);						
 						buffer = Buffer.alloc(1);
 						buffer.writeInt8(argL);
 						text = Buffer.concat([text, buffer]);	
-					} else if (argL <= 0x7FFF) {
+					} else if (argL <= 32767) {
 						// 1011 0010
 						text = Buffer.concat([text, Buffer.from([0xB2])]);
 						buffer = Buffer.alloc(2);
-						buffer.writeInt16LE(argL);
+						buffer.writeInt16BE(argL);
 						text = Buffer.concat([text, buffer]);	
-					} else if (argL <= 0x7FFFFFFF) {
+					} else {
 						// 1011 0100
 						text = Buffer.concat([text, Buffer.from([0xB4])]);
 						buffer = Buffer.alloc(4);
-						buffer.writeInt32LE(argL);
+						buffer.writeInt32BE(argL);
 						text = Buffer.concat([text, buffer]);							
 					}
 					text = Buffer.concat([text, arg]);
 				} else {
-                    this.#result = NetSocketSendDataBuildResult.ByteArrayOverflowError;
+                    this.#result = NetSocketSendDataBuildResult.ByteArrayLengthOverflowError;
                     return;
                 }
 			} else {
-                this.#result = NetSocketSendDataBuildResult.TypeNotImplementedError;
+                this.#result = NetSocketSendDataBuildResult.DataTypeNotImplementedError;
                 return;                
             }
 		}
@@ -393,24 +400,24 @@ class NetSocketSendData {
 		data = Buffer.concat([data, Buffer.from([0x01])]);
 	
 		let textL = text.length;
-		if (textL <= INT32_MAXVAL) {
-			if (textL <= 0x7F) {
+		if (textL <= TXT_MAXLEN) {
+			if (textL <= 127) {
 				// 0001 0001
 				data = Buffer.concat([data, Buffer.from([0x11])]);
 				buffer = Buffer.alloc(1);
 				buffer.writeInt8(textL);
 				data = Buffer.concat([data, buffer]);					
-			} else if (textL <= 0x7FFF) {
+			} else if (textL <= 32767) {
 				// 0001 0010
 				data = Buffer.concat([data, Buffer.from([0x12])]);
 				buffer = Buffer.alloc(2);
-				buffer.writeInt16LE(textL);
+				buffer.writeInt16BE(textL);
 				data = Buffer.concat([data, buffer]);	
-			} else if (textL <= 0x7FFFFFFF) {
+			} else {
 				// 0001 0100
 				data = Buffer.concat([data, Buffer.from([0x14])]);
 				buffer = Buffer.alloc(4);
-				buffer.writeInt32LE(textL);
+				buffer.writeInt32BE(textL);
 				data = Buffer.concat([data, buffer]);					
 			}
 			// start of text
@@ -427,7 +434,7 @@ class NetSocketSendData {
 			// end of transmission
 			data = Buffer.concat([data, Buffer.from([0x04])]);
 		} else {
-            this.#result = NetSocketSendDataBuildResult.TextOverflowError;
+            this.#result = NetSocketSendDataBuildResult.DataTotalLengthOverflowError;
             return;
         }
 		

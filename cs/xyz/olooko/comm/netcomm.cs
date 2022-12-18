@@ -424,7 +424,7 @@ namespace xyz.olooko.comm.netcomm
         {
             _result = NetSocketSendDataBuildResult.NoData;
 
-            //if (command < 0 || command > 255)
+            //if (command < 0x00 || command > 0xFF)
             //{
             //    _result = NetSocketSendDataBuildResult.CommandValueOverflowError;
             //    return;
@@ -1011,8 +1011,13 @@ namespace xyz.olooko.comm.netcomm
         public TcpSocket(Socket s)
             : base(s, NetSocketProtocolType.Tcp) 
         {
-            IPEndPoint iep = s.RemoteEndPoint as IPEndPoint;
-            _remoteAddress = new NetSocketAddress(iep.Address, iep.Port);
+            _remoteAddress = new NetSocketAddress("0.0.0.0", 0);
+
+            if (s != null)
+            {
+                IPEndPoint iep = s.RemoteEndPoint as IPEndPoint;
+                _remoteAddress = new NetSocketAddress(iep.Address, iep.Port);
+            }
         }
 
         public void Send(NetSocketSendData data)

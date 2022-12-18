@@ -753,7 +753,6 @@ class TcpServer
 
 class TcpSocket extends NetSocket 
 {
-    //bool _connected = false;
     bool get connected => this.available && this._connected;
 
     NetSocketAddress _remoteAddress = NetSocketAddress('0.0.0.0', 0);
@@ -763,7 +762,8 @@ class TcpSocket extends NetSocket
         : super(s, NetSocketProtocolType.Tcp) 
     {
         this._connected = (s != null);
-        _remoteAddress = NetSocketAddress(s!.remoteAddress.host, s!.remotePort);
+        if (s != null)
+            _remoteAddress = NetSocketAddress(s!.remoteAddress.host, s!.remotePort);
     }
 
     void send(NetSocketSendData data)

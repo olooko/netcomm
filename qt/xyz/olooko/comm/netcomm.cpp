@@ -778,6 +778,10 @@ bool TcpSocket::isConnected()
 
 NetSocketAddress TcpSocket::getRemoteAddress()
 {
+    if (_socket == nullptr)
+    {
+        return NetSocketAddress("0.0.0.0", 0);
+    }
     return NetSocketAddress(_socket->peerAddress(), _socket->peerPort());
 }
 

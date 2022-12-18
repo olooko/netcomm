@@ -6,4 +6,5 @@ Easy to use TCP/UDP library for each programming language, not fast
 * [Java](https://github.com/olooko/Netcomm/tree/main/java)
 * [Node.js](https://github.com/olooko/Netcomm/tree/main/js) 
 * [Python](https://github.com/olooko/Netcomm/tree/main/py)
+* [Ruby](https://github.com/olooko/Netcomm/tree/main/rb)
 * [Qt(C++)](https://github.com/olooko/Netcomm/tree/main/qt)

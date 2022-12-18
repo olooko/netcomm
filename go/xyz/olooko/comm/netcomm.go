@@ -329,7 +329,7 @@ func NewNetSocketSendData(command byte, args []interface{}) NetSocketSendData {
 	senddata.bytes = []byte{}
 	senddata.result = NetSocketSendDataBuildResult_NoData
 
-	//if command < 0 || command > 255 {
+	//if command < 0x00 || command > 0xFF {
 	//	senddata.result = NetSocketSendDataBuildResult_CommandValueOverflowError
 	//	return senddata
 	//}
@@ -733,11 +733,13 @@ func NewTcpSocket(c net.Conn) TcpSocket {
 	s := TcpSocket{}
 	s.netsock = NewNetSocket(c, NetSocketProtocolType_Tcp)
 	s.netsock.connected = (c != nil)
-	ss := strings.Split(c.RemoteAddr().String(), ":")
-	host := strings.Join(ss[:len(ss)-1], ":")
-	port, _ := strconv.Atoi(ss[len(ss)-1])
-	s.remoteAddress = NewNetSocketAddress(host, port)
-
+	s.remoteAddress = NewNetSocketAddress("0.0.0.0", 0)
+	if c != nil {
+		ss := strings.Split(c.RemoteAddr().String(), ":")
+		host := strings.Join(ss[:len(ss)-1], ":")
+		port, _ := strconv.Atoi(ss[len(ss)-1])
+		s.remoteAddress = NewNetSocketAddress(host, port)
+	}
 	return s
 }
 

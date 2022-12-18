@@ -43,7 +43,7 @@ class NetSocketData:
         sz = data[0] & 0x0F
         fmt = ''
         argL = -1
-        if sz == 1: fmt = '>b'
+        if sz == 1: fmt = 'b'
         elif sz == 2: fmt = '>h'
         elif sz == 4: fmt = '>i'
         if len(data) > sz:
@@ -95,7 +95,7 @@ class NetSocketData:
                                 sz = 0
                                 if self.__data[self.__datapos] in [0x31, 0x32, 0x34, 0x38]:
                                     sz = self.__data[self.__datapos] & 0x0F
-                                    if sz == 1: fmt = '>b'
+                                    if sz == 1: fmt = 'b'
                                     elif sz == 2: fmt = '>h'
                                     elif sz == 4: fmt = '>i'
                                     elif sz == 8: fmt = '>q'
@@ -237,13 +237,10 @@ class NetSocketSendData:
     def __init__(self, command, args):
         ARG_MAXLEN = 0x7FFFFF - 5
         TXT_MAXLEN = 0x7FFFFFFF - 10
-
         self.__result = NetSocketSendDataBuildResult.NoData
-
-        if command < 0 or command > 255:
+        if command < 0xFF or command > 0xFF:
             self.__result = NetSocketSendDataBuildResult.CommandValueOverflowError
             return
-        
         self.__command = command
         self.__args = args
         text = bytearray([command])
@@ -252,7 +249,7 @@ class NetSocketSendData:
                 if -128 <= arg and arg <= 127:
                     # 0011 0001
                     text.append(0x31)
-                    text.extend(bytearray(struct.pack('>b', arg)))
+                    text.extend(bytearray(struct.pack('b', arg)))
                 elif -32768 <= arg and arg <= 32767:
                     # 0011 0010
                     text.append(0x32)
@@ -285,7 +282,7 @@ class NetSocketSendData:
                     if argL <= 127:
                         # 1001 0001
                         text.append(0x91)
-                        text.extend(bytearray(struct.pack('>b', argL)))
+                        text.extend(bytearray(struct.pack('b', argL)))
                     elif argL <= 32767:
                         # 1001 0010
                         text.append(0x92)
@@ -304,7 +301,7 @@ class NetSocketSendData:
                     if argL <= 127:
                         # 1011 0001
                         text.append(0xB1)
-                        text.extend(bytearray(struct.pack('>b', argL)))
+                        text.extend(bytearray(struct.pack('b', argL)))
                     elif argL <= 32767:
                         # 1011 0010
                         text.append(0xB2)
@@ -327,7 +324,7 @@ class NetSocketSendData:
             if textlen <= 127:
                 # 0001 0001
                 data.append(0x11) 
-                data.extend(bytearray(struct.pack('>b', textlen)))
+                data.extend(bytearray(struct.pack('b', textlen)))
             elif textlen <= 32767:
                 # 0001 0010
                 data.append(0x12) 
@@ -478,7 +475,7 @@ class TcpServer:
 class TcpSocket(NetSocket):
     @property
     def connected(self):
-        return self._NetSocket__connected   
+        return self.available and self._NetSocket__connected   
 
     @property
     def remoteAddress(self):
@@ -486,9 +483,12 @@ class TcpSocket(NetSocket):
 
     def __init__(self, s):
         NetSocket.__init__(self, s, NetSocketProtocolType.Tcp)
-        address = s.getpeername()
-        self.__remote_address = NetSocketAddress(address[0], address[1])
         self._NetSocket__connected = s != None
+        self.__remote_address = NetSocketAddress('0.0.0.0', 0)
+        if s != None:
+            address = s.getpeername()
+            self.__remote_address = NetSocketAddress(address[0], address[1])
+            
 
     def send(self, data):
         self._NetSocket__send(data, None)

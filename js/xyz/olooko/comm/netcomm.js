@@ -275,7 +275,7 @@ class NetSocketSendData {
 
         this.#result = NetSocketSendDataBuildResult.NoData;
 
-        if (command < 0 || command > 255) {
+        if (command < 0x00 || command > 0xFF) {
             this.#result = NetSocketSendDataBuildResult.CommandValueOverflowError;
             return;
         }
@@ -597,7 +597,7 @@ class TcpSocket extends NetSocket {
 
         this.#socket = s;
         this.#connected = false;
-        this.#address = null;
+        this.#address = new NetSocketAddress('0.0.0.0', 0);
 
         if (this.#socket != null) {
             let me = this;

@@ -46,7 +46,7 @@ public class NetSocketSendData {
     public NetSocketSendData(byte command, Object[] args) {  
         _result = NetSocketSendDataBuildResult.NoData;
 
-        //if (command < 0 || command > 255) {
+        //if (command < 0x00 || command > 0xFF) {
         //    _result = NetSocketSendDataBuildResult.CommandValueOverflowError;
         //    return;
         //}

@@ -16,9 +16,12 @@ public class TcpSocket extends NetSocket {
 
     public TcpSocket(Socket s) { 
         super(s, NetSocketProtocolType.Tcp);
+        _remoteAddress = new NetSocketAddress("0.0.0.0", 0);  
 
-        InetSocketAddress address = (InetSocketAddress)s.getRemoteSocketAddress();
-        _remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());        
+        if (s != null) {
+            InetSocketAddress address = (InetSocketAddress)s.getRemoteSocketAddress();
+            _remoteAddress = new NetSocketAddress(address.getAddress(), address.getPort());      
+        }  
     }
 
     public void send(NetSocketSendData data) {

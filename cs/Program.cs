@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
@@ -11,15 +12,19 @@ namespace xyz.olooko.comm
     {
         static void Main(string[] args) 
         { 
-            Thread thread1 = new Thread(new ThreadStart(TcpServerProc));
+            Thread thread1 = new Thread(new ThreadStart(UdpSocketProc));
             thread1.IsBackground = true;
             thread1.Start();
 
-            Thread thread2 = new Thread(new ThreadStart(TcpClientProc));
+            Thread.Sleep(1000);
+
+            Thread thread2 = new Thread(new ThreadStart(TcpServerProc));
             thread2.IsBackground = true;
             thread2.Start();
 
-            Thread thread3 = new Thread(new ThreadStart(UdpSocketProc));
+            Thread.Sleep(1000);
+
+            Thread thread3 = new Thread(new ThreadStart(TcpClientProc));
             thread3.IsBackground = true;
             thread3.Start();
 
@@ -28,12 +33,35 @@ namespace xyz.olooko.comm
             thread3.Join();
         }
 
+        static void UdpSocketProc()
+        {
+            UdpSocket udpsocket = NetworkComm.UdpCast(new NetSocketAddress("127.0.0.1", 10010));
+
+            if (udpsocket.Available)
+            {
+                Console.WriteLine(string.Format("NetworkComm.UdpSocket Started. {0}", udpsocket.LocalAddress));
+                udpsocket.SetReceivedCallback(NetSocketReceivedCallback);
+
+                object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
+                NetSocketSendData data = new NetSocketSendData(0x88, args);
+
+                if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
+                {
+                    while (true)
+                    {
+                        udpsocket.Send(data, new NetSocketAddress("127.0.0.1", 10010));
+                        Thread.Sleep(5000);
+                    }
+                }
+            }
+        }
+
         static void TcpServerProc() 
         {
             TcpServer tcpserver = NetworkComm.TcpListen(new NetSocketAddress("127.0.0.1", 10010));
-            Console.WriteLine("NetworkComm.TcpServer Started...");
+            Console.WriteLine("NetworkComm.TcpServer Started.");
 
-            if (tcpserver.Started)
+            if (tcpserver.Running)
                 tcpserver.SetAcceptCallback(TcpServerAcceptCallback);
         }
 
@@ -43,45 +71,23 @@ namespace xyz.olooko.comm
 
             if (tcpsocket.Available)
             {
-                Console.WriteLine("NetworkComm.TcpSocket Started...");
+                Console.WriteLine(string.Format("NetworkComm.TcpClient Started. {0}", tcpsocket.LocalAddress));
                 tcpsocket.SetReceivedCallback(NetSocketReceivedCallback);
 
-                while (true)
+                object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
+                NetSocketSendData data = new NetSocketSendData(0x88, args);
+
+                if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
                 {
-                    if (tcpsocket.Connected)
+                    while (true)
                     {
-                        object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                        NetSocketSendData data = new NetSocketSendData(0x88, args);
-
-                        if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
+                        if (tcpsocket.Connected)
                             tcpsocket.Send(data);
+                        else
+                            break;
+
+                        Thread.Sleep(5000);
                     }
-                    else
-                        break;
-
-                    Thread.Sleep(5 * 1000);
-                }
-            }
-        }
-
-        static void UdpSocketProc() 
-        {
-            UdpSocket udpsocket = NetworkComm.UdpCast(new NetSocketAddress("127.0.0.1", 10010));
-
-            if (udpsocket.Available)
-            {
-                Console.WriteLine("NetworkComm.UdpSocket Started...");
-                udpsocket.SetReceivedCallback(NetSocketReceivedCallback);
-
-                while (true)
-                {
-                    object[] args = new object[] { -256, true, "Hello", -1.1, new byte[] { 0x41, 0x42, 0x43 } };
-                    NetSocketSendData data = new NetSocketSendData(0x88, args);
-
-                    if (data.BuildResult == NetSocketSendDataBuildResult.Successful)
-                        udpsocket.Send(data, new NetSocketAddress("127.0.0.1", 10010));
-
-                    Thread.Sleep(5 * 1000);
                 }
             }
         }
@@ -90,7 +96,7 @@ namespace xyz.olooko.comm
         {
             if (tcpsocket.Available)
             {
-                Console.WriteLine("NetworkComm.TcpSocket Accepted");
+                Console.WriteLine(string.Format("NetworkComm.TcpClient Accepted. {0}", tcpsocket.RemoteAddress));
                 tcpsocket.SetReceivedCallback(NetSocketReceivedCallback);
             }
         }
@@ -99,27 +105,31 @@ namespace xyz.olooko.comm
         {
             if (data.Result == NetSocketReceivedDataResult.Completed) 
             {
-                List<string> args = new List<string>();
-
-                foreach (object o in data.Args) 
+                if (data.Command == 0x88)
                 {
-                    if (o.GetType().Name == "Byte[]") 
-                    {
-                        byte[] ba = (byte[])o;
-                        StringBuilder sb = new StringBuilder();
-                        
-                        sb.Append("[");
-                        foreach (byte b in ba)
-                            sb.AppendFormat(" 0x{0:X2}", b);
-                        sb.Append("]");
+                    //long a1 = Convert.ToInt64(data.Args[0]);
+                    //bool a2 = (bool)data.Args[1];
+                    //string a3 = (string)data.Args[2];
+                    //double a4 = Convert.ToDouble(data.Args[3]);
+                    var a1 = data.Args[0];
+                    var a2 = data.Args[1]; 
+                    var a3 = data.Args[2]; 
+                    var a4 = data.Args[3];
 
-                        args.Add(sb.ToString());
-                    } 
-                    else
-                        args.Add(o.ToString());
+                    byte[] ba = (byte[])data.Args[4];
+                    string a5 = "0x" + BitConverter.ToString(ba).Replace("-", ",0x");
+
+                    string protocol = string.Empty;
+                    if (socket.ProtocolType == NetSocketProtocolType.Tcp)
+                        protocol = "TCP";
+                    else if (socket.ProtocolType == NetSocketProtocolType.Udp)
+                        protocol = "UDP";
+
+                    string output = string.Format("{0} {1} ({2}, {3}, {4}, {5}, [{6}])", 
+                        protocol, data.RemoteAddress, a1, a2, a3, a4, a5);
+
+                    Console.WriteLine(output);
                 }
-
-                Console.WriteLine(string.Format("protocol: {0}, command: 0x{1:X2}, args: {2}", socket.ProtocolType, data.Command, string.Format("{{{0}}}", string.Join(",", args))));
             }
             else if (data.Result == NetSocketReceivedDataResult.Interrupted)
             {
@@ -127,18 +137,13 @@ namespace xyz.olooko.comm
             }
             else if (data.Result == NetSocketReceivedDataResult.ParsingError) 
             {
-                Console.WriteLine("parsing-error");
+                Console.WriteLine("Parsing-Error");
             }
             else if (data.Result == NetSocketReceivedDataResult.Closed) 
             {
-                Console.WriteLine("close");
+                Console.WriteLine("Close");
                 socket.Close();
             }
         }
     }
 }
-
-
-
-
-

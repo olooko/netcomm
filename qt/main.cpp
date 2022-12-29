@@ -9,11 +9,34 @@ void NetSocketReceived(NetSocket* socket, NetSocketReceivedData data)
 {
     if (data.getResult() == NetSocketReceivedDataResult::Completed)
     {
-        NetSocketProtocolType protocol = socket->getProtocoltype();
         quint8 command = data.getCommand();
         QList<QVariant> args = data.getArgs();
 
-        qInfo() << ((protocol == NetSocketProtocolType::Tcp) ? "Tcp" : "Udp") << command << args;
+        if (command == 0x88)
+        {
+            qint64 a1 = args[0].toLongLong();
+            bool a2 = args[1].toBool();
+            QString a3 = args[2].toString();
+            double a4 = args[3].toDouble();
+            QString a5 = QString("");
+            QByteArray ba = args[4].toByteArray();
+            for (qsizetype i = 0; i < ba.size(); i++) {
+                if (!a5.isEmpty()) a5 += ",";
+                a5 += "0x" + QString::number((quint8)ba[i], 16);
+            }
+
+            QString protocol;
+            if (socket->getProtocoltype() == NetSocketProtocolType::Tcp)
+                protocol = "TCP";
+            else if (socket->getProtocoltype() == NetSocketProtocolType::Udp)
+                protocol = "UDP";
+
+            QString output = QString("%1 %2 (%3, %4, %5, %6, [%7])")
+                    .arg(protocol).arg(data.getRemoteAddress().toString())
+                    .arg(a1).arg(a2?"true":"false").arg(a3).arg(a4).arg(a5);
+
+            qInfo() << output;
+        }
     }
     else if (data.getResult() == NetSocketReceivedDataResult::Interrupted)
     {
@@ -21,12 +44,46 @@ void NetSocketReceived(NetSocket* socket, NetSocketReceivedData data)
     }
     else if (data.getResult() == NetSocketReceivedDataResult::ParsingError)
     {
-        qInfo() << "parsing-error";
+        qInfo() << "Parsing-Error";
     }
     else if (data.getResult() == NetSocketReceivedDataResult::Closed)
     {
-        qInfo() << "close";
+        qInfo() << "Close";
         socket->close();
+    }
+}
+
+void UdpSocketThread()
+{
+    NetSocketAddress address("127.0.0.1", 10010);
+    UdpSocket* udpsocket = UdpCast(address);
+
+    if (udpsocket->isAvailable())
+    {
+        qInfo() << "NetworkComm.UdpSocket Started." << udpsocket->getLocalAddress().toString();
+        udpsocket->setReceivedCallback(NetSocketReceived);
+
+        QList<QVariant> args;
+        args.append(-256);
+        args.append(true);
+        args.append(QString("Hello"));
+        args.append(-1.1);
+
+        static const char bytes[] = { 0x41, 0x42, 0x43 };
+        args.append(QByteArray::fromRawData(bytes, sizeof(bytes)));
+
+        NetSocketSendData data(0x88, args);
+
+        if (data.getBuildResult() == NetSocketSendDataBuildResult::Successful)
+        {
+            while (true)
+            {
+                NetSocketAddress address("127.0.0.1", 10010);
+                udpsocket->send(data, address);
+
+                QThread::msleep(5000);
+            }
+        }
     }
 }
 
@@ -34,7 +91,7 @@ void TcpServerAccept(TcpSocket* tcpsocket)
 {
     if (tcpsocket->isAvailable())
     {
-        qInfo() << "NetworkComm.TcpSocket Accepted";
+        qInfo() << "NetworkComm.TcpClient Accepted." << tcpsocket->getRemoteAddress().toString();
         tcpsocket->setReceivedCallback(NetSocketReceived);
     }
 }
@@ -44,9 +101,9 @@ void TcpServerThread()
     NetSocketAddress address("127.0.0.1", 10010);
 
     TcpServer* tcpserver = TcpListen(address);
-    qInfo() << "NetworkComm.TcpServer Started...";
+    qInfo() << "NetworkComm.TcpServer Started.";
 
-    if (tcpserver->isStarted())
+    if (tcpserver->isRunning())
     {
         tcpserver->setAcceptCallback(TcpServerAccept);
     }
@@ -59,67 +116,33 @@ void TcpClientThread()
 
     if (tcpsocket->isAvailable())
     {
-        qInfo() << "NetworkComm.TcpSocket Started...";
+        qInfo() << "NetworkComm.TcpClient Started." << tcpsocket->getLocalAddress().toString();
         tcpsocket->setReceivedCallback(NetSocketReceived);
 
-        while (true)
+        QList<QVariant> args;
+        args.append(-256);
+        args.append(true);
+        args.append(QString("Hello"));
+        args.append(-1.1);
+
+        static const char bytes[] = { 0x41, 0x42, 0x43 };
+        args.append(QByteArray::fromRawData(bytes, sizeof(bytes)));
+
+        NetSocketSendData data(0x88, args);
+
+        if (data.getBuildResult() == NetSocketSendDataBuildResult::Successful)
         {
-            if (tcpsocket->isConnected())
+            while (true)
             {
-                QList<QVariant> args;
-                args.append(-256);
-                args.append(true);
-                args.append(QString("Hello"));
-                args.append(-1.1);
-
-                static const char bytes[] = { 0x41, 0x42, 0x43 };
-                args.append(QByteArray::fromRawData(bytes, sizeof(bytes)));
-
-                NetSocketSendData data(0x88, args);
-
-                if (data.getBuildResult() == NetSocketSendDataBuildResult::Successful)
+                if (tcpsocket->isConnected())
                 {
                     tcpsocket->send(data);
                 }
+                else
+                    break;
+
+                QThread::msleep(5000);
             }
-            else
-                break;
-
-            QThread::msleep(5000);
-        }
-    }
-}
-
-void UdpSocketThread()
-{
-    NetSocketAddress address("127.0.0.1", 10010);
-    UdpSocket* udpsocket = UdpCast(address);
-
-    if (udpsocket->isAvailable())
-    {
-        qInfo() << "NetworkComm.UdpSocket Started...";
-        udpsocket->setReceivedCallback(NetSocketReceived);
-
-        while (true)
-        {
-            QList<QVariant> args;
-            args.append(-256);
-            args.append(true);
-            args.append(QString("Hello"));
-            args.append(-1.1);
-
-            static const char bytes[] = { 0x41, 0x42, 0x43 };
-            args.append(QByteArray::fromRawData(bytes, sizeof(bytes)));
-
-            NetSocketSendData data(0x88, args);
-
-            if (data.getBuildResult() == NetSocketSendDataBuildResult::Successful)
-            {
-                NetSocketAddress address("127.0.0.1", 10010);
-                udpsocket->send(data, address);
-            }
-
-            QThread::msleep(5000);
         }
     }
 }
@@ -128,9 +151,15 @@ int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    QFuture<void> f1 = QtConcurrent::run(TcpServerThread);
-    QFuture<void> f2 = QtConcurrent::run(TcpClientThread);
-    QFuture<void> f3 = QtConcurrent::run(UdpSocketThread);
+    QFuture<void> f1 = QtConcurrent::run(UdpSocketThread);
+
+    QThread::msleep(1000);
+
+    QFuture<void> f2 = QtConcurrent::run(TcpServerThread);
+
+    QThread::msleep(1000);
+
+    QFuture<void> f3 = QtConcurrent::run(TcpClientThread);
 
     f1.waitForFinished();
     f2.waitForFinished();

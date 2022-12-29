@@ -8,6 +8,37 @@
 #include <QUdpSocket>
 #include <QVariant>
 
+enum class NetSocketDataManipulationResult
+{
+    Completed, InProgress, NoData, ParsingError
+};
+
+enum class NetSocketDataParsingStep
+{
+    SOH, OTL, STX, ETX, CHK, EOT
+};
+
+enum class NetSocketProtocolType
+{
+    Tcp, Udp
+};
+
+enum class NetSocketReceivedDataResult
+{
+    Closed, Completed, Interrupted, ParsingError
+};
+
+enum class NetSocketSendDataBuildResult
+{
+    ByteArrayLengthOverflowError,
+    CommandValueOverflowError,
+    DataTotalLengthOverflowError,
+    DataTypeNotImplementedError,
+    NoData,
+    StringLengthOverflowError,
+    Successful
+};
+
 class NetSocketAddress
 {
 public:
@@ -17,27 +48,11 @@ public:
 
     QString getHost();
     quint16 getPort();
+    QString toString();
 
 private:
     QString _host;
     quint16 _port;
-
-    QByteArray _bytes;
-};
-
-enum class NetSocketProtocolType
-{
-    Tcp, Udp
-};
-
-enum class NetSocketDataManipulationResult
-{
-    Completed, InProgress, NoData, ParsingError
-};
-
-enum class NetSocketReceivedDataResult
-{
-    Closed, Completed, Interrupted, ParsingError
 };
 
 class NetSocketReceivedData
@@ -57,17 +72,6 @@ private:
     NetSocketAddress _address;
 };
 
-enum class NetSocketSendDataBuildResult
-{
-    ByteArrayLengthOverflowError,
-    CommandValueOverflowError,
-    DataTotalLengthOverflowError,
-    DataTypeNotImplementedError,
-    NoData,
-    StringLengthOverflowError,
-    Successful
-};
-
 class NetSocketSendData
 {
 public:
@@ -85,14 +89,21 @@ private:
 
     quint8 _command;
     QList<QVariant> _args;
-
     QByteArray _bytes;
     NetSocketSendDataBuildResult _result;
 };
 
-enum class NetSocketDataParsingStep
+class NetSocketDataArgLength
 {
-    SOH, OTL, STX, ETX, CHK, EOT
+public:
+    NetSocketDataArgLength(qsizetype sz, qsizetype argL);
+
+    qsizetype getSize();
+    qsizetype getArgLength();
+
+private:
+    qsizetype _sz;
+    qsizetype _argL;
 };
 
 class NetSocketData
@@ -102,20 +113,20 @@ public:
 
     void append(QByteArray buffer);
     NetSocketDataManipulationResult manipulate();
+
     QList<QVariant> getArgs();
     quint8 getCommand();
 
 private:
     quint8 _command;
     QList<QVariant> _args;
-
     QByteArray _data;
     qsizetype _datapos;
     quint8 _checksum;
     NetSocketDataParsingStep _step;
     qsizetype _textlen;
 
-    QPair<qsizetype, qsizetype> getArgLength(QByteArray data, qsizetype datalen, qsizetype datapos);
+    NetSocketDataArgLength getArgLength(qsizetype datalen);
 };
 
 class NetSocket;
@@ -136,7 +147,7 @@ public:
 
 protected:
     void run() override;
-    virtual void send(NetSocketSendData data, NetSocketAddress address);
+    void send(NetSocketSendData data, NetSocketAddress address);
 
     QAbstractSocket* _socket;
 
@@ -144,13 +155,12 @@ private:
     NetSocketProtocolType _protocol;
     NetSocketDataManipulationResult _result;
     NetSocketReceivedCallback _callback;
+    NetSocketAddress _localAddress;
 
-    char* _buffer;
     NetSocketData _data;
-
     QFuture<void> _timeout;
 
-    void sendProc(NetSocketSendData data, NetSocketAddress address, int bytesTransferred);
+    void sendProc(NetSocketSendData data, NetSocketAddress address, qsizetype bytesTransferred);
     static void checkInterruptedTimeout(NetSocket* s, int seconds, NetSocketAddress address);
 };
 
@@ -163,6 +173,9 @@ public:
     NetSocketAddress getRemoteAddress();
 
     void send(NetSocketSendData data);
+
+private:
+    NetSocketAddress _remoteAddress;
 };
 
 class TcpSocket;
@@ -173,10 +186,10 @@ class TcpServer : public QThread
 public:
     TcpServer(QTcpServer* s);
 
-    void setAcceptCallback(TcpServerAcceptCallback callback);
-    void close();
+    bool isRunning();
 
-    bool isStarted();
+    void close();
+    void setAcceptCallback(TcpServerAcceptCallback callback);    
 
 protected:
     void run() override;

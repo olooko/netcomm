@@ -6,92 +6,117 @@ const {
 	NetSocketSendDataBuildResult,
 	TcpConnect,
 	TcpListen,
-	UdpCast 
+	UdpCast, 
+	NetSocketProtocolType
 } = require('./xyz/olooko/comm/netcomm');
 
-
-function tcpserver_proc() {
-    const tcpserver = TcpListen(new NetSocketAddress('127.0.0.1', 10010));
-    if (tcpserver.isStarted()) {
-		console.log('NetworkComm.TcpServer Started...');
-        tcpserver.setAcceptCallback(tcpserverAcceptCallback);
+async function UdpSocketProc() {
+    const udpsocket = await UdpCast(new NetSocketAddress('127.0.0.1', 10010));
+    if (udpsocket.isAvailable()) {
+        console.log(`NetworkComm.UdpSocket Started. ${udpsocket.getLocalAddress()}`);
+        udpsocket.setReceivedCallback(NetSocketReceivedCallback);
+		data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
+		if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful) {
+			setInterval(() => {
+				udpsocket.send(data, new NetSocketAddress('127.0.0.1', 10010));
+			}, 5000);
+		}
 	}
 }
 
-function tcpclient_proc() {
-	setTimeout(() => {
-		const tcpsocket = TcpConnect(new NetSocketAddress('127.0.0.1', 10010));
-		if (tcpsocket.isAvailable()) {
-			console.log('NetworkComm.TcpSocket Started...');
-			tcpsocket.setReceivedCallback(netsocketReceivedCallback);
+async function TcpServerProc() {
+    const tcpserver = await TcpListen(new NetSocketAddress('127.0.0.1', 10010));
+    if (tcpserver.isRunning()) {
+		console.log('NetworkComm.TcpServer Started.');
+        tcpserver.setAcceptCallback(TcpServerAcceptCallback);
+	}
+}
+
+async function TcpClientProc() {
+	const tcpsocket = await TcpConnect(new NetSocketAddress('127.0.0.1', 10010));
+	if (tcpsocket.isAvailable()) {
+		console.log(`NetworkComm.TcpClient Started. ${tcpsocket.getLocalAddress()}`);
+		tcpsocket.setReceivedCallback(NetSocketReceivedCallback);
+		data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
+		if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful) {
 			setInterval(() => {
 				if (tcpsocket.isConnected()) { 
-					data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
-					if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
-						tcpsocket.send(data);
+					tcpsocket.send(data);
 				}
 			}, 5000);
-		}		
-	}, 1000);
-}
-
-function udpsocket_proc() {
-    const udpsocket = UdpCast(new NetSocketAddress('127.0.0.1', 10010));
-    if (udpsocket.isAvailable()) {
-        console.log('NetworkComm.UdpSocket Started...');
-        udpsocket.setReceivedCallback(netsocketReceivedCallback);
-		setInterval(() => {
-			data = new NetSocketSendData(0x88, [-256, true, 'Hello', -1.1, Buffer.from([0x41, 0x42, 0x43])]);
-			if (data.getBuildResult() == NetSocketSendDataBuildResult.Successful)
-            	udpsocket.send(data, new NetSocketAddress('127.0.0.1', 10010));
-		}, 5000);
+		}
 	}
 }
 
-function tcpserverAcceptCallback(tcpsocket) {
+function TcpServerAcceptCallback(tcpsocket) {
 	if (tcpsocket.isAvailable()) {
-		console.log('NetworkComm.TcpSocket Accepted');
-		tcpsocket.setReceivedCallback(netsocketReceivedCallback);
+		console.log(`NetworkComm.TcpClient Accepted. ${tcpsocket.getRemoteAddress()}`);
+		tcpsocket.setReceivedCallback(NetSocketReceivedCallback);
 	}
 }
 
-function netsocketReceivedCallback(socket, data) {
+function NetSocketReceivedCallback(socket, data) {
 	if (data.getResult() == NetSocketReceivedDataResult.Completed) {
-		let protocol = socket.getProtocolType();
-		let command = data.getCommand();
-		let args = data.getArgs();
-		console.log(`protocol: ${protocol}, command: ${command}, args: ${JSON.stringify(args)}`);
-	} else if (data.getResult() == NetSocketReceivedDataResult.Interrupted) {
+		if (data.getCommand() == 0x88) {
+			let a1 = data.getArgs()[0];
+            let a2 = data.getArgs()[1];
+            let a3 = data.getArgs()[2];
+            let a4 = data.getArgs()[3];   
+			
+			let a5 = "";
+			let ba = data.getArgs()[4];
+			for (let i = 0; i < ba.length; i++) {
+				if (a5 != "") a5 += ",";
+                a5 += "0x" + ba[i].toString(16);
+			} 
+
+			let protocol = "";
+			if (socket.getProtocolType() == NetSocketProtocolType.Tcp) {
+				protocol = "TCP";
+			} else if (socket.getProtocolType() == NetSocketProtocolType.Udp) {
+				protocol = "UDP";
+			}
+
+			console.log(`${protocol} ${data.getRemoteAddress()} (${a1}, ${a2}, ${a3}, ${a4}, [${a5}])`);
+		}
+	} 
+	else if (data.getResult() == NetSocketReceivedDataResult.Interrupted) {
 		console.log("Interrupted");
-	} else if (data.getResult() == NetSocketReceivedDataResult.ParsingError) {
-		console.log("parsing-error");
-	} else if (data.getResult() == NetSocketReceivedDataResult.Closed) {
-		console.log("close");
+	} 
+	else if (data.getResult() == NetSocketReceivedDataResult.ParsingError) {
+		console.log("Parsing-Error");
+	} 
+	else if (data.getResult() == NetSocketReceivedDataResult.Closed) {
+		console.log("Close");
 		socket.close();
 	}
 }
 
 if (isMainThread) {
 	const thread1 = new Worker(__filename);
-	thread1.postMessage('tcpserver');
+	thread1.postMessage('udpsocket');
 
-	const thread2 = new Worker(__filename);
-	thread2.postMessage('tcpclient');
+	setTimeout(() => {
+		const thread2 = new Worker(__filename);
+		thread2.postMessage('tcpserver');
+	}, 1000);
 
-	const thread3 = new Worker(__filename);
-	thread3.postMessage('udpsocket');
+	setTimeout(() => {
+		const thread3 = new Worker(__filename);
+		thread3.postMessage('tcpclient');
+	}, 2000);
 } else {
 	parentPort.on('message', (value) => {
 		switch (value) {
+			case 'udpsocket':
+				UdpSocketProc();
+				break;				
 			case 'tcpserver':
-				tcpserver_proc();
+				TcpServerProc();
 				break;
 			case 'tcpclient':
-				tcpclient_proc();
+				TcpClientProc();
 				break;
-			case 'udpsocket':
-				udpsocket_proc();
-				break;					
 		}
 		parentPort.close();
 	})

@@ -1,5 +1,6 @@
 package xyz.olooko.comm.netcomm;
 
-public enum NetSocketDataManipulationResult {
+public enum NetSocketDataManipulationResult 
+{
     Completed, InProgress, NoData, ParsingError
 }

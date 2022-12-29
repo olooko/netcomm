@@ -6,27 +6,39 @@ import java.net.Socket;
 
 public class NetworkComm {
     
-    public static TcpSocket TcpConnect(NetSocketAddress address) {
+    public static TcpSocket TcpConnect(NetSocketAddress address) 
+    {
         Socket s = null;
+
         try {
             s = new Socket(address.getHost(), address.getPort());
-        } catch (Exception e) {}
+        } 
+        catch (Exception e) {}
+
         return new TcpSocket(s);
     }
 
-    public static TcpServer TcpListen(NetSocketAddress address) {
+    public static TcpServer TcpListen(NetSocketAddress address) 
+    {
         ServerSocket s = null;
+
         try {
-            s = new ServerSocket(address.getPort(), 1024, address.getInetAddress());
-        } catch (Exception e) {}
+            s = new ServerSocket(address.getPort(), 0, address.getInetAddress());
+        } 
+        catch (Exception e) {}
+
         return new TcpServer(s);
     }
 
-    public static UdpSocket UdpCast(NetSocketAddress address) {
+    public static UdpSocket UdpCast(NetSocketAddress address) 
+    {
         DatagramSocket s = null;
+
         try {
             s = new DatagramSocket(address.getPort(), address.getInetAddress());
-        } catch (Exception e) {}
+        } 
+        catch (Exception e) {}
+        
         return new UdpSocket(s);
     }
 }

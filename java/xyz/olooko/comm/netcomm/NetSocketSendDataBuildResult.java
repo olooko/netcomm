@@ -1,6 +1,7 @@
 package xyz.olooko.comm.netcomm;
 
-public enum NetSocketSendDataBuildResult {
+public enum NetSocketSendDataBuildResult 
+{
     ByteArrayLengthOverflowError, 
     CommandValueOverflowError,
     DataTotalLengthOverflowError,

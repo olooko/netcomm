@@ -1,29 +1,35 @@
 package xyz.olooko.comm.netcomm;
 
-public class NetSocketReceivedData {
-
+public class NetSocketReceivedData 
+{
+    private byte _command;
     private Object[] _args;
-    public Object[] getArgs() {
+    private NetSocketReceivedDataResult _result;
+    private NetSocketAddress _address;
+
+    public Object[] getArgs() 
+    {
         return _args;
     }
-
-    private byte _command;
-    public byte getCommand() {
-        return _command;
+    
+    public int getCommand() 
+    {
+        return _command & 0xFF;
     }
-   
-    private NetSocketAddress _address;
-    public NetSocketAddress getRemoteAddress() {
+    
+    public NetSocketAddress getRemoteAddress() 
+    {
         return _address;
     }
-
-    private NetSocketReceivedDataResult _result;
-    public NetSocketReceivedDataResult getResult() {
+    
+    public NetSocketReceivedDataResult getResult() 
+    {
         return _result;
     }
 
-    public NetSocketReceivedData(byte command, Object[] args, NetSocketReceivedDataResult result, NetSocketAddress address) {
-        _command = command;
+    public NetSocketReceivedData(int command, Object[] args, NetSocketReceivedDataResult result, NetSocketAddress address) 
+    {
+        _command = (byte)(command & 0xFF);
         _args = args;
         _result = result;
         _address = address;

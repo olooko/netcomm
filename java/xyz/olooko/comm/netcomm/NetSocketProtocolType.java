@@ -1,5 +1,6 @@
 package xyz.olooko.comm.netcomm;
 
-public enum NetSocketProtocolType {
+public enum NetSocketProtocolType 
+{
     Tcp, Udp
 }

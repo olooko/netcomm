@@ -12,6 +12,10 @@ class CBoolean(value: Boolean) : IDataType {
         _value = value
     }
 
+    override fun getDataType(): DataType {
+        return DataType.CBoolean
+    }
+
     override fun toString(): String {
         return _value.toString()
     }
@@ -23,6 +27,10 @@ class CByteArray(value: ByteArray) : IDataType {
 
     init {
         _value = value
+    }
+
+    override fun getDataType(): DataType {
+        return DataType.CByteArray
     }
 
     override fun toString(): String {
@@ -43,6 +51,10 @@ class CFloat(value: Double) : IDataType {
         _value = value
     }
 
+    override fun getDataType(): DataType {
+        return DataType.CFloat
+    }
+
     override fun toString(): String {
         return _value.toString()
     }
@@ -54,6 +66,10 @@ class CInteger(value: Long) : IDataType {
 
     init {
         _value = value
+    }
+
+    override fun getDataType(): DataType {
+        return DataType.CInteger
     }
 
     override fun toString(): String {
@@ -69,13 +85,22 @@ class CString(value: String) : IDataType {
         _value = value
     }
 
+    override fun getDataType(): DataType {
+        return DataType.CString
+    }
+
     override fun toString(): String {
         return _value
     }
 }
 
-interface IDataType {
+enum class DataType
+{
+    CBoolean, CByteArray, CFloat, CInteger, CString
+};
 
+interface IDataType {
+    fun getDataType(): DataType
     override fun toString(): String
 }
 
@@ -123,12 +148,10 @@ open class CSocket(s: Socket?, d: DatagramSocket?, protocolType: CSocketProtocol
         }
     }
 
-    constructor(s: Socket?, protocolType: CSocketProtocolType)
-            : this(s, null, protocolType) {
+    constructor(s: Socket?, protocolType: CSocketProtocolType) : this(s, null, protocolType) {
     }
 
-    constructor(d: DatagramSocket?, protocolType: CSocketProtocolType)
-            : this(null, d, protocolType) {
+    constructor(s: DatagramSocket?, protocolType: CSocketProtocolType) : this(null, s, protocolType) {
     }
 
     fun close() {
@@ -165,9 +188,9 @@ open class CSocket(s: Socket?, d: DatagramSocket?, protocolType: CSocketProtocol
                         }
                     }
                     if (bytesTransferred > 0) {
-                        _data.Append(buffer, bytesTransferred)
+                        _data.append(buffer, bytesTransferred)
                         while (true) {
-                            _result = _data.Manipulate()
+                            _result = _data.manipulate()
                             if (_result === CSocketDataManipulationResult.Completed) {
                                 callback(this, CSocketReceivedData(_data.command, _data.args, CSocketReceivedDataResult.Completed, remoteAddress!!))
                                 continue
@@ -273,7 +296,7 @@ class CSocketData {
         _textlen = 0
     }
 
-    fun Append(buffer: ByteArray, bytesTransferred: Int) {
+    fun append(buffer: ByteArray, bytesTransferred: Int) {
         if (_data.capacity() < _datalen + bytesTransferred) {
             _data = ByteBuffer.allocate(_datalen + bytesTransferred).put(_data)
             _data.position(_datalen)
@@ -282,7 +305,7 @@ class CSocketData {
         _datalen += bytesTransferred
     }
 
-    fun Manipulate(): CSocketDataManipulationResult {
+    fun manipulate(): CSocketDataManipulationResult {
         while (true) {
             val datalen = _datalen - _datapos
             when (_step) {
@@ -560,8 +583,8 @@ class CSocketSendData(command: Int, args: CSocketDataArgs) {
         var text: ByteArray = byteArrayOf(_command)
         for (n in 0 until _args.length) {
             val arg: IDataType = _args.at(n)
-            when (arg.javaClass.kotlin.simpleName) {
-                "CInteger" -> {
+            when (arg.getDataType()) {
+                DataType.CInteger -> {
                     val i: Long = (arg as CInteger).value
                     if (Byte.MIN_VALUE <= i && i <= Byte.MAX_VALUE) {
                         text += 0x31.toByte()
@@ -577,7 +600,7 @@ class CSocketSendData(command: Int, args: CSocketDataArgs) {
                         text += ByteBuffer.allocate(8).putLong(i).array()
                     }
                 }
-                "CFloat" -> {
+                DataType.CFloat -> {
                     val f: Double = (arg as CFloat).value
                     if (abs(f) <= Float.MAX_VALUE) {
                         text += 0x54.toByte()
@@ -587,11 +610,11 @@ class CSocketSendData(command: Int, args: CSocketDataArgs) {
                         text += ByteBuffer.allocate(8).putDouble(f).array()
                     }
                 }
-                "CBoolean" -> {
+                DataType.CBoolean -> {
                     text += 0x71.toByte()
                     text += ByteBuffer.allocate(1).put((if ((arg as CBoolean).value) 1 else 0).toByte()).array()
                 }
-                "CString" -> {
+                DataType.CString -> {
                     val s: ByteArray = (arg as CString).value.toByteArray()
                     if (s.size <= ARG_MAXLEN) {
                         if (s.size <= Byte.MAX_VALUE) {
@@ -610,20 +633,20 @@ class CSocketSendData(command: Int, args: CSocketDataArgs) {
                         return
                     }
                 }
-                "CByteArray" -> {
-                    val b: ByteArray = (arg as CByteArray).value
-                    if (b.size <= ARG_MAXLEN) {
-                        if (b.size <= Byte.MAX_VALUE) {
+                DataType.CByteArray -> {
+                    val ba: ByteArray = (arg as CByteArray).value
+                    if (ba.size <= ARG_MAXLEN) {
+                        if (ba.size <= Byte.MAX_VALUE) {
                             text += 0xB1.toByte()
-                            text += b.size.toByte()
-                        } else if (b.size <= Short.MAX_VALUE) {
+                            text += ba.size.toByte()
+                        } else if (ba.size <= Short.MAX_VALUE) {
                             text += 0xB2.toByte()
-                            text += ByteBuffer.allocate(2).putShort(b.size.toShort()).array()
+                            text += ByteBuffer.allocate(2).putShort(ba.size.toShort()).array()
                         } else {
                             text += 0xB4.toByte()
-                            text += ByteBuffer.allocate(4).putInt(b.size).array()
+                            text += ByteBuffer.allocate(4).putInt(ba.size).array()
                         }
-                        text += b
+                        text += ba
                     } else {
                         _result = CSocketSendDataBuildResult.ByteArrayLengthOverflowError
                         return
@@ -742,7 +765,7 @@ class TcpSocket(s: Socket?) : CSocket(s, CSocketProtocolType.Tcp) {
     }
 }
 
-class UdpSocket(d: DatagramSocket?) : CSocket(d, CSocketProtocolType.Udp) {
+class UdpSocket(s: DatagramSocket?) : CSocket(s, CSocketProtocolType.Udp) {
     public override fun send(data: CSocketSendData, address: CSocketAddress?) {
         super.send(data, address)
     }

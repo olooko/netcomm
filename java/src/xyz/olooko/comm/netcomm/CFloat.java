@@ -13,6 +13,11 @@ public class CFloat implements IDataType
     }
 
     @Override
+    public DataType getDataType() {
+        return DataType.CFloat;
+    }
+
+    @Override
     public String toString() {
         return _value.toString();
     }

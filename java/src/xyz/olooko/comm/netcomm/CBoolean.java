@@ -13,6 +13,11 @@ public class CBoolean implements IDataType
     }
 
     @Override
+    public DataType getDataType() {
+        return DataType.CBoolean;
+    }
+
+    @Override
     public String toString() {
         return _value.toString();
     }

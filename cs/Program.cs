@@ -1,12 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Net.Sockets;
-using System.Runtime.Remoting.Metadata.W3cXsd2001;
-using System.Text;
 using System.Threading;
 
 using xyz.olooko.comm.netcomm;
-using static System.Net.Mime.MediaTypeNames;
+
 
 namespace comm 
 {

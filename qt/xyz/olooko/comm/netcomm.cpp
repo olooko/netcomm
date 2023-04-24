@@ -15,14 +15,14 @@ bool CBoolean::getValue()
     return _value;
 }
 
+DataType CBoolean::getDataType()
+{
+    return DataType::CBoolean;
+}
+
 QString CBoolean::toString()
 {
     return _value ? "true" : "false";
-}
-
-DataType CBoolean::getType()
-{
-    return DataType::Boolean;
 }
 
 CByteArray::CByteArray(QByteArray value)
@@ -33,6 +33,11 @@ CByteArray::CByteArray(QByteArray value)
 QByteArray CByteArray::getValue()
 {
     return _value;
+}
+
+DataType CByteArray::getDataType()
+{
+    return DataType::CByteArray;
 }
 
 QString CByteArray::toString()
@@ -46,11 +51,6 @@ QString CByteArray::toString()
     return s;
 }
 
-DataType CByteArray::getType()
-{
-    return DataType::ByteArray;
-}
-
 CFloat::CFloat(double value)
 {
     _value = value;
@@ -61,14 +61,14 @@ double CFloat::getValue()
     return _value;
 }
 
+DataType CFloat::getDataType()
+{
+    return DataType::CFloat;
+}
+
 QString CFloat::toString()
 {
     return QString("%1").arg(_value);
-}
-
-DataType CFloat::getType()
-{
-    return DataType::Float;
 }
 
 CInteger::CInteger(qint64 value)
@@ -81,14 +81,14 @@ qint64 CInteger::getValue()
     return _value;
 }
 
+DataType CInteger::getDataType()
+{
+    return DataType::CInteger;
+}
+
 QString CInteger::toString()
 {
     return QString("%1").arg(_value);
-}
-
-DataType CInteger::getType()
-{
-    return DataType::Integer;
 }
 
 CString::CString(QString value)
@@ -101,14 +101,14 @@ QString CString::getValue()
     return _value;
 }
 
+DataType CString::getDataType()
+{
+    return DataType::CString;
+}
+
 QString CString::toString()
 {
     return _value;
-}
-
-DataType CString::getType()
-{
-    return DataType::String;
 }
 
 CSocketAddress::CSocketAddress()
@@ -462,9 +462,9 @@ CSocketSendData::CSocketSendData(quint8 command, CSocketDataArgs args)
     {
         IDataType* arg = _args.at(i);
 
-        switch (arg->getType())
+        switch (arg->getDataType())
         {
-        case DataType::Integer:
+        case DataType::CInteger:
             {
                 qint64 i = ((CInteger *)arg)->getValue();
 
@@ -492,7 +492,7 @@ CSocketSendData::CSocketSendData(quint8 command, CSocketDataArgs args)
             }
             break;
 
-        case DataType::Float:
+        case DataType::CFloat:
             {
                 double f = ((CFloat *)arg)->getValue();
 
@@ -511,12 +511,12 @@ CSocketSendData::CSocketSendData(quint8 command, CSocketDataArgs args)
             }
             break;
 
-        case DataType::Boolean:
+        case DataType::CBoolean:
             textds << (quint8)0x71;
             textds << qToBigEndian(((CBoolean *)arg)->getValue());
             break;
 
-        case DataType::String:
+        case DataType::CString:
             {
                 QByteArray s = ((CString *)arg)->getValue().toUtf8();
 
@@ -548,7 +548,7 @@ CSocketSendData::CSocketSendData(quint8 command, CSocketDataArgs args)
             }
             break;
 
-        case DataType::ByteArray:
+        case DataType::CByteArray:
             {
                 QByteArray ba = ((CByteArray *)arg)->getValue();
 

@@ -13,6 +13,11 @@ public class CByteArray implements IDataType
     }
 
     @Override
+    public DataType getDataType() {
+        return DataType.CByteArray;
+    }
+
+    @Override
     public String toString() {
         String s = "";
         for (byte b: _value) {

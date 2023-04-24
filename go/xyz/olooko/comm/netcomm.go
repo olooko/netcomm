@@ -6,13 +6,21 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
+const (
+	DataType_CBoolean = iota
+	DataType_CByteArray
+	DataType_CFloat
+	DataType_CInteger
+	DataType_CString
+)
+
 type IDataType interface {
+	GetDataType() int
 	String() string
 }
 
@@ -26,6 +34,10 @@ func NewCBoolean(value bool) CBoolean {
 
 func (d CBoolean) GetValue() bool {
 	return d.value
+}
+
+func (d CBoolean) GetDataType() int {
+	return DataType_CBoolean
 }
 
 func (d CBoolean) String() string {
@@ -42,6 +54,10 @@ func NewCByteArray(value []byte) CByteArray {
 
 func (d CByteArray) GetValue() []byte {
 	return d.value
+}
+
+func (d CByteArray) GetDataType() int {
+	return DataType_CByteArray
 }
 
 func (d CByteArray) String() string {
@@ -68,6 +84,10 @@ func (d CFloat) GetValue() float64 {
 	return d.value
 }
 
+func (d CFloat) GetDataType() int {
+	return DataType_CFloat
+}
+
 func (d CFloat) String() string {
 	return fmt.Sprintf("%f", d.value)
 }
@@ -84,6 +104,10 @@ func (d CInteger) GetValue() int64 {
 	return d.value
 }
 
+func (d CInteger) GetDataType() int {
+	return DataType_CInteger
+}
+
 func (d CInteger) String() string {
 	return fmt.Sprintf("%d", d.value)
 }
@@ -98,6 +122,10 @@ func NewCString(value string) CString {
 
 func (d CString) GetValue() string {
 	return d.value
+}
+
+func (d CString) GetDataType() int {
+	return DataType_CString
 }
 
 func (d CString) String() string {
@@ -642,9 +670,8 @@ func NewCSocketSendData(command byte, args CSocketDataArgs) CSocketSendData {
 
 	for x := 0; x < args.GetLength(); x++ {
 		arg := args.GetArgs()[x]
-		argType := reflect.TypeOf(arg).String()
-		switch argType {
-		case "netcomm.CInteger":
+		switch arg.GetDataType() {
+		case DataType_CInteger:
 			i := arg.(CInteger).GetValue()
 			if math.MinInt8 <= i && i <= math.MaxInt8 {
 				text.Write([]byte{byte(0x31)})
@@ -668,7 +695,7 @@ func NewCSocketSendData(command byte, args CSocketDataArgs) CSocketSendData {
 				textlen += 8
 			}
 
-		case "netcomm.CFloat":
+		case DataType_CFloat:
 			f := arg.(CFloat).GetValue()
 			if math.Abs(f) <= math.MaxFloat32 {
 				text.Write([]byte{byte(0x54)})
@@ -682,13 +709,13 @@ func NewCSocketSendData(command byte, args CSocketDataArgs) CSocketSendData {
 				textlen += 8
 			}
 
-		case "netcomm.CBoolean":
+		case DataType_CBoolean:
 			text.Write([]byte{byte(0x71)})
 			textlen += 1
 			binary.Write(&text, binary.BigEndian, arg.(CBoolean).GetValue())
 			textlen += 1
 
-		case "netcomm.CString":
+		case DataType_CString:
 			s := []byte(arg.(CString).GetValue())
 			if len(s) <= ARG_MAXLEN {
 				if len(s) <= math.MaxInt8 {
@@ -714,7 +741,7 @@ func NewCSocketSendData(command byte, args CSocketDataArgs) CSocketSendData {
 				return senddata
 			}
 
-		case "netcomm.CByteArray":
+		case DataType_CByteArray:
 			ba := arg.(CByteArray).GetValue()
 			if len(ba) <= ARG_MAXLEN {
 				if len(ba) <= math.MaxInt8 {

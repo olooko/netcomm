@@ -71,115 +71,80 @@ public class CSocketSendData
         {
             IDataType arg = args.at(n);
 
-            switch (arg.getClass().getSimpleName()) 
-            {
-                case "CInteger":
-                    long i = ((CInteger)arg).getValue();
-
-                    if (Byte.MIN_VALUE <= i && i <= Byte.MAX_VALUE) 
-                    {
-                        textds.write(new byte[] { (byte)0x31 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(1).put((byte)i).array(), 0, 1);
-                    } 
-                    else if (Short.MIN_VALUE <= i && i <= Short.MAX_VALUE) 
-                    {
-                        textds.write(new byte[] { (byte)0x32 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(2).putShort((short)i).array(), 0, 2);
-                    } 
-                    else if (Integer.MIN_VALUE <= i && i <= Integer.MAX_VALUE) 
-                    {
-                        textds.write(new byte[] { (byte)0x34 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(4).putInt((int)i).array(), 0, 4);
-                    } 
-                    else 
-                    {
-                        textds.write(new byte[] { (byte)0x38 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(8).putLong((long)i).array(), 0, 8);
+            switch (arg.getDataType()) {
+                case CInteger -> {
+                    long i = ((CInteger) arg).getValue();
+                    if (Byte.MIN_VALUE <= i && i <= Byte.MAX_VALUE) {
+                        textds.write(new byte[]{(byte) 0x31}, 0, 1);
+                        textds.write(ByteBuffer.allocate(1).put((byte) i).array(), 0, 1);
+                    } else if (Short.MIN_VALUE <= i && i <= Short.MAX_VALUE) {
+                        textds.write(new byte[]{(byte) 0x32}, 0, 1);
+                        textds.write(ByteBuffer.allocate(2).putShort((short) i).array(), 0, 2);
+                    } else if (Integer.MIN_VALUE <= i && i <= Integer.MAX_VALUE) {
+                        textds.write(new byte[]{(byte) 0x34}, 0, 1);
+                        textds.write(ByteBuffer.allocate(4).putInt((int) i).array(), 0, 4);
+                    } else {
+                        textds.write(new byte[]{(byte) 0x38}, 0, 1);
+                        textds.write(ByteBuffer.allocate(8).putLong((long) i).array(), 0, 8);
                     }
-                    break;
-
-                case "CFloat":
-                    double f = ((CFloat)arg).getValue();
-
-                    if (Math.abs(f) <= Float.MAX_VALUE) 
-                    {
-                        textds.write(new byte[] { (byte)0x54 }, 0, 1);
-                        textds.write(ByteBuffer.allocate(4).putFloat((float)f).array(), 0, 4);
-                    } 
-                    else 
-                    {
-                        textds.write(new byte[] { (byte)0x58 }, 0, 1);
+                }
+                case CFloat -> {
+                    double f = ((CFloat) arg).getValue();
+                    if (Math.abs(f) <= Float.MAX_VALUE) {
+                        textds.write(new byte[]{(byte) 0x54}, 0, 1);
+                        textds.write(ByteBuffer.allocate(4).putFloat((float) f).array(), 0, 4);
+                    } else {
+                        textds.write(new byte[]{(byte) 0x58}, 0, 1);
                         textds.write(ByteBuffer.allocate(8).putDouble(f).array(), 0, 8);
                     }
-                    break;
-                
-                case "CBoolean":
-                    textds.write(new byte[] { (byte)0x71 }, 0, 1);
-                    textds.write(ByteBuffer.allocate(1).put((byte)(((CBoolean)arg).getValue()?1:0)).array(), 0, 1);
-                    break;
-
-                case "CString":
-                    byte[] s = ((CString)arg).getValue().getBytes();
-
-                    if (s.length <= ARG_MAXLEN) 
-                    {
-                        if (s.length <= Byte.MAX_VALUE)
-                        {
-                            textds.write(new byte[] { (byte)0x91 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(1).put((byte)s.length).array(), 0, 1);
-                        } 
-                        else if (s.length <= Short.MAX_VALUE) 
-                        {
-                            textds.write(new byte[] { (byte)0x92 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(2).putShort((short)s.length).array(), 0, 2);
-                        } 
-                        else 
-                        {
-                            textds.write(new byte[] { (byte)0x94 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(4).putInt((int)s.length).array(), 0, 4);
+                }
+                case CBoolean -> {
+                    textds.write(new byte[]{(byte) 0x71}, 0, 1);
+                    textds.write(ByteBuffer.allocate(1).put((byte) (((CBoolean) arg).getValue() ? 1 : 0)).array(), 0, 1);
+                }
+                case CString -> {
+                    byte[] s = ((CString) arg).getValue().getBytes();
+                    if (s.length <= ARG_MAXLEN) {
+                        if (s.length <= Byte.MAX_VALUE) {
+                            textds.write(new byte[]{(byte) 0x91}, 0, 1);
+                            textds.write(ByteBuffer.allocate(1).put((byte) s.length).array(), 0, 1);
+                        } else if (s.length <= Short.MAX_VALUE) {
+                            textds.write(new byte[]{(byte) 0x92}, 0, 1);
+                            textds.write(ByteBuffer.allocate(2).putShort((short) s.length).array(), 0, 2);
+                        } else {
+                            textds.write(new byte[]{(byte) 0x94}, 0, 1);
+                            textds.write(ByteBuffer.allocate(4).putInt((int) s.length).array(), 0, 4);
                         }
 
                         textds.write(s, 0, s.length);
-                    } 
-                    else 
-                    {
+                    } else {
                         _result = CSocketSendDataBuildResult.StringLengthOverflowError;
                         return;
                     }
-                    break;
-
-                case "CByteArray":
-                    byte[] b = ((CByteArray)arg).getValue();
-
-                    if (b.length <= ARG_MAXLEN) 
-                    {
-                        if (b.length <= Byte.MAX_VALUE) 
-                        {
-                            textds.write(new byte[] { (byte)0xB1 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(1).put((byte)b.length).array(), 0, 1);
-                        } 
-                        else if (b.length <= Short.MAX_VALUE) 
-                        {
-                            textds.write(new byte[] { (byte)0xB2 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(2).putShort((short)b.length).array(), 0, 2);
-                        } 
-                        else 
-                        {
-                            textds.write(new byte[] { (byte)0xB4 }, 0, 1);
-                            textds.write(ByteBuffer.allocate(4).putInt((int)b.length).array(), 0, 4);
+                }
+                case CByteArray -> {
+                    byte[] ba = ((CByteArray) arg).getValue();
+                    if (ba.length <= ARG_MAXLEN) {
+                        if (ba.length <= Byte.MAX_VALUE) {
+                            textds.write(new byte[]{(byte) 0xB1}, 0, 1);
+                            textds.write(ByteBuffer.allocate(1).put((byte) ba.length).array(), 0, 1);
+                        } else if (ba.length <= Short.MAX_VALUE) {
+                            textds.write(new byte[]{(byte) 0xB2}, 0, 1);
+                            textds.write(ByteBuffer.allocate(2).putShort((short) ba.length).array(), 0, 2);
+                        } else {
+                            textds.write(new byte[]{(byte) 0xB4}, 0, 1);
+                            textds.write(ByteBuffer.allocate(4).putInt((int) ba.length).array(), 0, 4);
                         }
-                        textds.write(b, 0, b.length);
-                    } 
-                    else 
-                    {
+                        textds.write(ba, 0, ba.length);
+                    } else {
                         _result = CSocketSendDataBuildResult.ByteArrayLengthOverflowError;
                         return;
                     }
-                    break;
-
-                default:
+                }
+                default -> {
                     _result = CSocketSendDataBuildResult.DataTypeNotImplementedError;
                     return;
+                }
             }
         }
 

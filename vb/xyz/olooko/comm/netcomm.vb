@@ -14,12 +14,15 @@ Imports System.Xml.Linq
 Namespace xyz.olooko.comm.netcomm
     Public Class CBoolean
         Implements IDataType
-
         Public ReadOnly Property Value As Boolean
 
         Public Sub New(ByVal value As Boolean)
             Me.Value = value
         End Sub
+
+        Public Function GetDataType() As DataType Implements IDataType.GetDataType
+            Return DataType.CBoolean
+        End Function
 
         Public Overrides Function ToString() As String Implements IDataType.ToString
             Return Me.Value.ToString()
@@ -35,6 +38,10 @@ Namespace xyz.olooko.comm.netcomm
             Me.Value = value
         End Sub
 
+        Public Function GetDataType() As DataType Implements IDataType.GetDataType
+            Return DataType.CByteArray
+        End Function
+
         Public Overrides Function ToString() As String Implements IDataType.ToString
             Return "0x" & BitConverter.ToString(Me.Value).Replace("-", ",0x")
         End Function
@@ -48,6 +55,9 @@ Namespace xyz.olooko.comm.netcomm
         Public Sub New(ByVal value As Double)
             Me.Value = value
         End Sub
+        Public Function GetDataType() As DataType Implements IDataType.GetDataType
+            Return DataType.CFloat
+        End Function
 
         Public Overrides Function ToString() As String Implements IDataType.ToString
             Return Me.Value.ToString()
@@ -62,6 +72,9 @@ Namespace xyz.olooko.comm.netcomm
         Public Sub New(ByVal value As Long)
             Me.Value = value
         End Sub
+        Public Function GetDataType() As DataType Implements IDataType.GetDataType
+            Return DataType.CInteger
+        End Function
 
         Public Overrides Function ToString() As String Implements IDataType.ToString
             Return Me.Value.ToString()
@@ -76,13 +89,25 @@ Namespace xyz.olooko.comm.netcomm
         Public Sub New(ByVal value As String)
             Me.Value = value
         End Sub
+        Public Function GetDataType() As DataType Implements IDataType.GetDataType
+            Return DataType.CString
+        End Function
 
         Public Overrides Function ToString() As String Implements IDataType.ToString
             Return Me.Value
         End Function
     End Class
 
+    Public Enum DataType
+        CBoolean
+        CByteArray
+        CFloat
+        CInteger
+        CString
+    End Enum
+
     Public Interface IDataType
+        Function GetDataType() As DataType
         Function ToString() As String
     End Interface
 
@@ -389,7 +414,7 @@ Namespace xyz.olooko.comm.netcomm
 
                                         Select Case sz
                                             Case 1
-                                                i = CLng(buffer(0))
+                                                i = CLng(IIf(buffer(0) < 128, buffer(0), buffer(0) - 256))
                                             Case 2
                                                 i = CLng(BitConverter.ToInt16(buffer, 0))
                                             Case 4
@@ -698,8 +723,8 @@ Namespace xyz.olooko.comm.netcomm
 
             For Each arg As IDataType In _args
 
-                Select Case arg.[GetType]().Name
-                    Case "CInteger"
+                Select Case arg.GetDataType()
+                    Case DataType.CInteger
                         Dim i As Long = (TryCast(arg, CInteger)).Value
 
                         If Convert.ToInt64(SByte.MinValue) <= i AndAlso i <= Convert.ToInt64(SByte.MaxValue) Then
@@ -723,7 +748,7 @@ Namespace xyz.olooko.comm.netcomm
                             textms.Write(buffer, 0, 8)
                         End If
 
-                    Case "CFloat"
+                    Case DataType.CFloat
                         Dim f As Double = (TryCast(arg, CFloat)).Value
 
                         If Math.Abs(f) <= Convert.ToDouble(Single.MaxValue) Then
@@ -738,14 +763,13 @@ Namespace xyz.olooko.comm.netcomm
                             textms.Write(buffer, 0, 8)
                         End If
 
-                    Case "CBoolean"
+                    Case DataType.CBoolean
                         textms.Write(New Byte() {&H71}, 0, 1)
                         textms.Write(BitConverter.GetBytes((TryCast(arg, CBoolean)).Value), 0, 1)
-                    Case "CString"
+                    Case DataType.CString
                         Dim s As Byte() = Encoding.UTF8.GetBytes((TryCast(arg, CString)).Value)
 
                         If s.Length <= ARG_MAXLEN Then
-
                             If s.Length <= SByte.MaxValue Then
                                 buffer = BitConverter.GetBytes(Convert.ToSByte(s.Length))
                                 textms.Write(New Byte() {&H91}, 0, 1)
@@ -768,7 +792,7 @@ Namespace xyz.olooko.comm.netcomm
                             Return
                         End If
 
-                    Case "CByteArray"
+                    Case DataType.CByteArray
                         Dim ba As Byte() = (TryCast(arg, CByteArray)).Value
 
                         If ba.Length <= ARG_MAXLEN Then

@@ -10,14 +10,14 @@
 
 enum class DataType
 {
-    Boolean, ByteArray, Float, Integer, String
+    CBoolean, CByteArray, CFloat, CInteger, CString
 };
 
 class IDataType
 {
 public:
-    virtual QString toString() = 0;
-    virtual DataType getType() = 0;
+    virtual DataType getDataType() = 0;
+    virtual QString toString() = 0; 
 };
 
 class CBoolean : public IDataType
@@ -26,8 +26,9 @@ public:
     CBoolean(bool value);
 
     bool getValue();
-    QString toString();
-    DataType getType();
+
+    DataType getDataType();
+    QString toString(); 
 
 private:
     bool _value;
@@ -39,8 +40,9 @@ public:
     CByteArray(QByteArray value);
 
     QByteArray getValue();
+
+    DataType getDataType();
     QString toString();
-    DataType getType();
 
 private:
     QByteArray _value;
@@ -52,8 +54,9 @@ public:
     CFloat(double value);
 
     double getValue();
+
+    DataType getDataType();
     QString toString();
-    DataType getType();
 
 private:
     double _value;
@@ -65,8 +68,9 @@ public:
     CInteger(qint64 value);
 
     qint64 getValue();
+
+    DataType getDataType();
     QString toString();
-    DataType getType();
 
 private:
     qint64 _value;
@@ -78,8 +82,9 @@ public:
     CString(QString value);
 
     QString getValue();
+
+    DataType getDataType();
     QString toString();
-    DataType getType();
 
 private:
     QString _value;

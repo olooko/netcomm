@@ -40,27 +40,36 @@ public abstract class CSocket implements Runnable
 
     public CSocket(Socket s, CSocketProtocolType protocolType)
     {
-        _socket = s;
-        initialize(protocolType);
-        
-        if (isAvailable())  
-        {
-            InetSocketAddress address = (InetSocketAddress)_socket.getLocalSocketAddress();
-            _localAddress = new CSocketAddress(address.getAddress(), address.getPort());
-        }
+        initialize(s, null, protocolType);
     }
 
-    public CSocket(DatagramSocket s, CSocketProtocolType protocolType)
+    public CSocket(DatagramSocket d, CSocketProtocolType protocolType)
     {
-        _dgram = s;
-        initialize(protocolType);
+        initialize(null, d, protocolType);
+    }
 
-        if (isAvailable()) 
+    private void initialize(Socket s, DatagramSocket d, CSocketProtocolType protocolType)
+    {
+        _socket = s;
+        _dgram = d;
+
+        _data = new CSocketData();
+        _protocol = protocolType;
+        _result = CSocketDataManipulationResult.NoData;
+        _localAddress = new CSocketAddress("0.0.0.0", 0);
+
+        if (isAvailable())
         {
-            InetSocketAddress address = (InetSocketAddress)_dgram.getLocalSocketAddress();
-            _localAddress = new CSocketAddress(address.getAddress(), address.getPort());
+            if (_protocol == CSocketProtocolType.Tcp) {
+                InetSocketAddress address = (InetSocketAddress)_socket.getLocalSocketAddress();
+                _localAddress = new CSocketAddress(address.getAddress(), address.getPort());
+            }
+            else if (_protocol == CSocketProtocolType.Udp) {
+                InetSocketAddress address = (InetSocketAddress)_dgram.getLocalSocketAddress();
+                _localAddress = new CSocketAddress(address.getAddress(), address.getPort());
+            }
         }
-    }    
+    }
 
     public void close() 
     {
@@ -109,15 +118,6 @@ public abstract class CSocket implements Runnable
         }
     }  
 
-    private void initialize(CSocketProtocolType protocolType)
-    {
-
-        _data = new CSocketData();
-        _protocol = protocolType;
-        _result = CSocketDataManipulationResult.NoData;
-        _localAddress = new CSocketAddress("0.0.0.0", 0);
-    }
-
     @Override
     public void run() 
     {    
@@ -152,11 +152,11 @@ public abstract class CSocket implements Runnable
 
             if (bytesTransferred > 0) 
             {
-                _data.Append(buffer, bytesTransferred);
+                _data.append(buffer, bytesTransferred);
                 
                 while (true) 
                 {
-                    _result = _data.Manipulate();
+                    _result = _data.manipulate();
 
                     if (_result == CSocketDataManipulationResult.Completed)
                     {

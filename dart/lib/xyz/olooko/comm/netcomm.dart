@@ -5,8 +5,14 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
+enum DataType
+{
+    CBoolean, CByteArray, CFloat, CInteger, CString
+}
+
 abstract class IDataType 
 {
+    DataType getDataType();
     String toString();
 }
 
@@ -18,6 +24,11 @@ class CBoolean implements IDataType
     CBoolean(bool value)
     {
         _value = value;
+    }
+
+    DataType getDataType()
+    {
+        return DataType.CBoolean;
     }
 
     String toString()
@@ -34,6 +45,11 @@ class CByteArray implements IDataType
     CByteArray(Uint8List value)
     {
         _value = value;
+    }
+
+    DataType getDataType()
+    {
+        return DataType.CByteArray;
     }
 
     String toString()
@@ -58,6 +74,11 @@ class CFloat implements IDataType
         _value = value;
     }
 
+    DataType getDataType()
+    {
+        return DataType.CFloat;
+    }
+
     String toString()
     {
         return _value.toString();
@@ -74,6 +95,11 @@ class CInteger implements IDataType
         _value = value;
     }
 
+    DataType getDataType()
+    {
+        return DataType.CInteger;
+    }
+
     String toString()
     {
         return _value.toString();
@@ -88,6 +114,11 @@ class CString implements IDataType
     CString(String value)
     {
         _value = value;
+    }
+
+    DataType getDataType()
+    {
+        return DataType.CString;
     }
 
     String toString()
@@ -606,9 +637,9 @@ class CSocketSendData
         {
             IDataType arg = _args[n];
 
-            switch (arg.runtimeType.toString()) 
+            switch (arg.getDataType()) 
             {
-                case 'CInteger': 
+                case DataType.CInteger: 
                 {
                     int i = (arg as CInteger).value;
 
@@ -647,7 +678,7 @@ class CSocketSendData
                 }
                 break;
 
-                case 'CFloat': 
+                case DataType.CFloat: 
                 {
                     double f = (arg as CFloat).value;
 
@@ -670,14 +701,14 @@ class CSocketSendData
                 }
                 break;
 
-                case 'CBoolean': 
+                case DataType.CBoolean: 
                 {
                     text.add(0x71);
                     text.add((arg as CBoolean).value ? 1 : 0);
                 }
                 break;
 
-                case 'CString': 
+                case DataType.CString: 
                 {
                     List<int> s = utf8.encode((arg as CString).value);
 
@@ -717,7 +748,7 @@ class CSocketSendData
                 }
                 break;
 
-                case 'CByteArray': 
+                case DataType.CByteArray: 
                 {
                     Uint8List b = (arg as CByteArray).value;
 

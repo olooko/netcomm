@@ -1,6 +1,15 @@
 const net = require('net');
 const dgram = require('dgram');
 
+const DataType = {
+	CBoolean: "CBoolean",
+	CByteArray: "CByteArray",
+	CFloat: "CFloat",
+	CInteger: "CInteger",
+	CString: "CString",
+}
+
+
 class IDataType {
     #value;
     constructor(value) {
@@ -9,6 +18,10 @@ class IDataType {
 
     getValue() {
         return this.#value;
+    }
+
+    getDataType() {
+        return DataType.CString;
     }
 
     toString() {
@@ -20,6 +33,10 @@ class CBoolean extends IDataType {
     constructor(value) {
         super(value);
     }
+
+    getDataType() {
+        return DataType.CBoolean;
+    }    
 }
 
 class CByteArray extends IDataType {
@@ -28,6 +45,11 @@ class CByteArray extends IDataType {
         super(value);
         this.#value = value;
     }
+
+    getDataType() {
+        return DataType.CByteArray;
+    }   
+
     toString() {
         let s = "";
         let ba = this.#value;
@@ -43,17 +65,29 @@ class CFloat extends IDataType {
     constructor(value) {
         super(value);
     }
+
+    getDataType() {
+        return DataType.CFloat;
+    }
 }
 
 class CInteger extends IDataType {
     constructor(value) {
         super(value);
     }
+
+    getDataType() {
+        return DataType.CInteger;
+    }
 }
 
 class CString extends IDataType {
     constructor(value) {
         super(value);
+    }
+
+    getDataType() {
+        return DataType.CString;
     }
 }
 
@@ -429,24 +463,24 @@ class CSocketDataArgs {
 }
 
 const CSocketDataManipulationResult = {
-    Completed: "completed",
-    InProgress: "in-progress",
-    NoData: "no-data",
-    ParsingError: "parsing-error",
+    Completed: "Completed",
+    InProgress: "InProgress",
+    NoData: "NoData",
+    ParsingError: "ParsingError",
 }
 
 const CSocketDataParsingStep = {
-	SOH: "soh",
-	OTL: "otl",
-	STX: "stx",
-	ETX: "etx",
-	CHK: "chk",
-	EOT: "eot",
+	SOH: "SOH",
+	OTL: "OTL",
+	STX: "STX",
+	ETX: "ETX",
+	CHK: "CHK",
+	EOT: "EOT",
 }
 
 const CSocketProtocolType = {
-	Tcp: "tcp",
-	Udp: "udp",
+	Tcp: "Tcp",
+	Udp: "Udp",
 }
 
 class CSocketReceivedData {
@@ -480,10 +514,10 @@ class CSocketReceivedData {
 }
 
 const CSocketReceivedDataResult = {
-    Closed: "closed",
-    Completed: "completed",
-    Interrupted: "interrupted",
-    ParsingError: "parsing-error",
+    Closed: "Closed",
+    Completed: "Completed",
+    Interrupted: "Interrupted",
+    ParsingError: "ParsingError",
 }
 
 class CSocketSendData {
@@ -512,7 +546,8 @@ class CSocketSendData {
 		let buffer;
 		for (let x = 0; x < args.getLength(); x++) {
 			let arg = args.at(x);
-			if (arg.constructor.name == 'CInteger') {
+            let type = arg.getDataType();
+			if (type == DataType.CInteger) {
                 let i = arg.getValue();
 				if (-128 <= i && i <= 127) {
 					text = Buffer.concat([text, Buffer.from([0x31])]);
@@ -539,7 +574,7 @@ class CSocketSendData {
 					text = Buffer.concat([text, buffer]);					
 				}
 			} 
-            else if (arg.constructor.name == 'CFloat') {
+            else if (type == DataType.CFloat) {
                 let f = arg.getValue(); 
 				if (Math.abs(f) <= 3.40282347e+38) {
 					text = Buffer.concat([text, Buffer.from([0x54])]);
@@ -554,12 +589,12 @@ class CSocketSendData {
 					text = Buffer.concat([text, buffer]);					
 				}
 			} 
-            else if (arg.constructor.name == 'CBoolean') {
+            else if (type == DataType.CBoolean) {
                 let b = arg.getValue();
 				text = Buffer.concat([text, Buffer.from([0x71])]);
 				text = Buffer.concat([text, Buffer.from([b?0x01:0x00])]);
 			} 
-            else if (arg.constructor.name == 'CString') {
+            else if (type == DataType.CString) {
 				let s = Buffer.from(arg.getValue(), 'utf8');
 				let argL = s.length;
 				if (argL <= ARG_MAXLEN) {
@@ -586,7 +621,7 @@ class CSocketSendData {
                     return;
                 }
 			} 
-            else if (arg.constructor.name == 'CByteArray') {
+            else if (type == DataType.CByteArray) {
                 let ba = arg.getValue();
 				let argL = ba.length;
 				if (argL <= ARG_MAXLEN) {
@@ -684,13 +719,13 @@ class CSocketSendData {
 }
 
 const CSocketSendDataBuildResult = {
-    ByteArrayLengthOverflowError: "bytearray-length-overflow-error", 
-    CommandValueOverflowError: "command-value-overflow-error",
-	DataTotalLengthOverflowError: "data-totallength-overflow-error",
-    DataTypeNotImplementedError: "datatype-not-implemented-error",
-    NoData: "no-data",
-    StringLengthOverflowError: "string-length-overflow-error", 
-    Successful: "successful",
+    ByteArrayLengthOverflowError: "ByteArrayLengthOverflowError", 
+    CommandValueOverflowError: "CommandValueOverflowError",
+	DataTotalLengthOverflowError: "DataTotalLengthOverflowError",
+    DataTypeNotImplementedError: "DataTypeNotImplementedError",
+    NoData: "NoData",
+    StringLengthOverflowError: "StringLengthOverflowError", 
+    Successful: "Successful",
 }
 
 class TcpServer {

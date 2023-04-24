@@ -13,6 +13,11 @@ public class CString implements IDataType
     }
 
     @Override
+    public DataType getDataType() {
+        return DataType.CString;
+    }
+
+    @Override
     public String toString() {
         return _value;
     }

@@ -8,6 +8,11 @@ class CBoolean extends IDataType {
     }
 
     @Override
+    DataType getDataType() {
+        return DataType.CBoolean
+    }
+
+    @Override
     String toString() {
         return _value.toString()
     }
@@ -16,6 +21,11 @@ class CBoolean extends IDataType {
 class CByteArray extends IDataType {
     CByteArray(byte[] value) {
         _value = value
+    }
+
+    @Override
+    DataType getDataType() {
+        return DataType.CByteArray
     }
 
     @Override
@@ -33,11 +43,21 @@ class CFloat extends IDataType {
     CFloat(double value) {
         _value = value
     }
+
+    @Override
+    DataType getDataType() {
+        return DataType.CFloat
+    }
 }
 
 class CInteger extends IDataType {
     CInteger(long value) {
         _value = value
+    }
+
+    @Override
+    DataType getDataType() {
+        return DataType.CInteger
     }
 }
 
@@ -47,9 +67,18 @@ class CString extends IDataType {
     }
 
     @Override
+    DataType getDataType() {
+        return DataType.CString
+    }
+
+    @Override
     String toString() {
         return _value
     }
+}
+
+enum DataType {
+    CBoolean, CByteArray, CFloat, CInteger, CString
 }
 
 abstract class IDataType {
@@ -57,6 +86,10 @@ abstract class IDataType {
 
     def getValue() {
         return _value
+    }
+
+    DataType getDataType() {
+        return DataType.CString
     }
 
     String toString() {
@@ -136,10 +169,10 @@ abstract class CSocket {
                     }
 
                     if (bytesTransferred > 0) {
-                        _data.Append(buffer, bytesTransferred)
+                        _data.append(buffer, bytesTransferred)
 
                         while (true) {
-                            _result = _data.Manipulate()
+                            _result = _data.manipulate()
                             if (_result == CSocketDataManipulationResult.Completed) {
                                 callback.call(this, new CSocketReceivedData(_data.command, _data.args, CSocketReceivedDataResult.Completed, remoteAddress))
                                 continue
@@ -257,7 +290,7 @@ class CSocketData {
         _textlen = 0
     }
 
-    def Append(buffer, bytesTransferred) {
+    def append(buffer, bytesTransferred) {
         if (_data.capacity() < _datalen + bytesTransferred) {
             _data = ByteBuffer.allocate(_datalen + bytesTransferred).put(_data)
             _data.position(_datalen)
@@ -267,7 +300,7 @@ class CSocketData {
         _datalen += bytesTransferred
     }
 
-    def Manipulate() {
+    def manipulate() {
         while (true) {
             def datalen = _datalen - _datapos
 
@@ -500,6 +533,16 @@ enum CSocketDataParsingStep {
     SOH, OTL, STX, ETX, CHK, EOT
 }
 
+class CSocketDataStream extends ByteArrayOutputStream {
+    def getBuffer() {
+        return super.buf
+    }
+
+    def getCount() {
+        return super.count
+    }
+}
+
 enum CSocketProtocolType {
     Tcp, Udp
 }
@@ -536,16 +579,6 @@ class CSocketReceivedData {
 
 enum CSocketReceivedDataResult {
     Closed, Completed, Interrupted, ParsingError
-}
-
-class CSocketDataStream extends ByteArrayOutputStream {
-    def getBuffer() {
-        return super.buf
-    }
-
-    def getCount() {
-        return super.count
-    }
 }
 
 class CSocketSendData {
@@ -595,8 +628,8 @@ class CSocketSendData {
         for (def n = 0; n < args.length; n++) {
             def arg = args.at(n)
 
-            switch (arg.class.simpleName) {
-                case "CInteger":
+            switch (arg.getDataType()) {
+                case DataType.CInteger:
                     def i = ((CInteger)arg).value
 
                     if (Byte.MIN_VALUE <= i && i <= Byte.MAX_VALUE) {
@@ -617,7 +650,7 @@ class CSocketSendData {
                     }
                     break
 
-                case "CFloat":
+                case DataType.CFloat:
                     def f = ((CFloat)arg).value
                     if (Math.abs(f) <= Float.MAX_VALUE) {
                         textds.write(new byte[] { (byte)0x54 }, 0, 1)
@@ -629,12 +662,12 @@ class CSocketSendData {
                     }
                     break
 
-                case "CBoolean":
+                case DataType.CBoolean:
                     textds.write(new byte[] { (byte)0x71 }, 0, 1)
                     textds.write(ByteBuffer.allocate(1).put((byte)(((CBoolean)arg).getValue()?1:0)).array(), 0, 1)
                     break
 
-                case "CString":
+                case DataType.CString:
                     def s = ((CString)arg).value.bytes
                     if (s.length <= ARG_MAXLEN) {
                         if (s.length <= Byte.MAX_VALUE) {
@@ -657,22 +690,22 @@ class CSocketSendData {
                     }
                     break
 
-                case "CByteArray":
-                    def b = ((CByteArray)arg).value
-                    if (b.length <= ARG_MAXLEN) {
-                        if (b.length <= Byte.MAX_VALUE) {
+                case DataType.CByteArray:
+                    def ba = ((CByteArray)arg).value
+                    if (ba.length <= ARG_MAXLEN) {
+                        if (ba.length <= Byte.MAX_VALUE) {
                             textds.write(new byte[] { (byte)0xB1 }, 0, 1)
-                            textds.write(ByteBuffer.allocate(1).put((byte)b.length).array(), 0, 1)
+                            textds.write(ByteBuffer.allocate(1).put((byte)ba.length).array(), 0, 1)
                         }
                         else if (b.length <= Short.MAX_VALUE) {
                             textds.write(new byte[] { (byte)0xB2 }, 0, 1)
-                            textds.write(ByteBuffer.allocate(2).putShort((short)b.length).array(), 0, 2)
+                            textds.write(ByteBuffer.allocate(2).putShort((short)ba.length).array(), 0, 2)
                         }
                         else {
                             textds.write(new byte[] { (byte)0xB4 }, 0, 1)
-                            textds.write(ByteBuffer.allocate(4).putInt((int)b.length).array(), 0, 4)
+                            textds.write(ByteBuffer.allocate(4).putInt((int)ba.length).array(), 0, 4)
                         }
-                        textds.write(b, 0, b.length)
+                        textds.write(ba, 0, ba.length)
                     }
                     else {
                         _result = CSocketSendDataBuildResult.ByteArrayLengthOverflowError

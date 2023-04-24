@@ -1,6 +1,16 @@
 my @empty = ();
 
 
+package DataType;
+use constant {
+    CBoolean => 0,
+    CByteArray => 1,
+    CFloat => 2,
+    CInteger => 3,
+    CString => 4,
+};
+
+
 package IDataType;
 
 sub new() {
@@ -22,6 +32,11 @@ package CBoolean;
 use vars qw(@ISA);
 @ISA = qw(IDataType);
 
+sub getDataType() {
+    my $self = shift;
+    return DataType->CBoolean; 
+}
+
 sub toString() {
     my $self = shift;
     return ($self->{value} == 1) ? "true" : "false";
@@ -31,6 +46,11 @@ sub toString() {
 package CByteArray;
 use vars qw(@ISA);
 @ISA = qw(IDataType);
+
+sub getDataType() {
+    my $self = shift;
+    return DataType->CByteArray; 
+}
 
 sub toString() {
     my $self = shift;
@@ -50,6 +70,11 @@ package CFloat;
 use vars qw(@ISA);
 @ISA = qw(IDataType);
 
+sub getDataType() {
+    my $self = shift;
+    return DataType->CFloat; 
+}
+
 sub toString() {
     my $self = shift;
     return sprintf("%f", $self->{value});
@@ -60,6 +85,11 @@ package CInteger;
 use vars qw(@ISA);
 @ISA = qw(IDataType);
 
+sub getDataType() {
+    my $self = shift;
+    return DataType->CInteger; 
+}
+
 sub toString() {
     my $self = shift;
     return sprintf("%d", $self->{value});
@@ -69,6 +99,11 @@ sub toString() {
 package CString;
 use vars qw(@ISA);
 @ISA = qw(IDataType);
+
+sub getDataType() {
+    my $self = shift;
+    return DataType->CString; 
+}
 
 sub toString() {
     my $self = shift;
@@ -675,9 +710,9 @@ sub new() {
 
     for (my $n = 0; $n < $self->{args}->length; $n++) {
         my $arg = $self->{args}->at($n);
-        my $type = ref($arg);
+        my $type = $arg->getDataType();
 
-        if ($type eq "CInteger") {
+        if ($type eq DataType->CInteger) {
             my $i =  $arg->value;
             if (-128 <= $i && $i <= 127) {
                 $text .= pack("C", 0x31);
@@ -696,7 +731,7 @@ sub new() {
                 $text .= pack("q>", $i);
             }
         }     
-        elsif ($type eq "CFloat") {
+        elsif ($type eq DataType->CFloat) {
             my $f = $arg->value;
             if (abs($f) <= 3.40282347e+38) {
                 $text .= pack("C", 0x54);
@@ -706,11 +741,11 @@ sub new() {
                 $text .= pack("d>", $f);
             }
         }
-        elsif ($type eq "CBoolean") {
+        elsif ($type eq DataType->CBoolean) {
             $text .= pack("C", 0x71);
             $text .= pack("c", $arg->value);
         }  
-        elsif ($type eq "CString") {
+        elsif ($type eq DataType->CString) {
             my $s = Encode::encode("utf8", $arg->value);
             my $argL = length($s);
 
@@ -734,7 +769,7 @@ sub new() {
                 return $self;
             }
         }
-        elsif ($type eq "CByteArray") {
+        elsif ($type eq DataType->CByteArray) {
             my $ba = $arg->value;
             my $argL = length($ba);
 

@@ -6,6 +6,14 @@ import threading
 import time
 
 
+class DataType(Enum):
+    CBoolean = 0
+    CByteArray = 1
+    CFloat = 2
+    CInteger = 3
+    CString = 4
+
+
 class IDataType:
     @property
     def value(self):
@@ -14,15 +22,22 @@ class IDataType:
     def __init__(self, value):
         self.__value = value
 
+    def getDataType(self):
+        return DataType.CString
+    
     def __str__(self):
         return str(self.__value)
     
     
 class CBoolean(IDataType):
-    pass
+    def getDataType(self):
+        return DataType.CBoolean
 
 
 class CByteArray(IDataType):
+    def getDataType(self):
+        return DataType.CByteArray
+        
     def __str__(self):
         s = ''
         ba = self._IDataType__value
@@ -33,16 +48,19 @@ class CByteArray(IDataType):
 
 
 class CFloat(IDataType):
-    pass
-
+    def getDataType(self):
+        return DataType.CFloat
+    
 
 class CInteger(IDataType):
-    pass
-
+    def getDataType(self):
+        return DataType.CInteger
+    
 
 class CString(IDataType):
-    pass
-
+    def getDataType(self):
+        return DataType.CString
+    
 
 class CSocket(metaclass=ABCMeta):
     @property
@@ -407,7 +425,8 @@ class CSocketSendData:
         self.__args = args
         text = bytearray([command])
         for arg in self.__args:
-            if type(arg) is CInteger:
+            argType = arg.getDataType()
+            if argType == DataType.CInteger:
                 i = arg.value
                 if -128 <= i and i <= 127:
                     text.append(0x31)
@@ -421,7 +440,7 @@ class CSocketSendData:
                 else:
                     text.append(0x38)
                     text.extend(bytearray(struct.pack('>q', i)))
-            elif type(arg) is CFloat:
+            elif argType == DataType.CFloat:
                 f = arg.value
                 if abs(f) <= 3.40282347e+38:
                     text.append(0x54) 
@@ -429,11 +448,11 @@ class CSocketSendData:
                 else:
                     text.append(0x58) 
                     text.extend(bytearray(struct.pack('>d', f)))
-            elif type(arg) is CBoolean:
+            elif argType == DataType.CBoolean:
                 b = arg.value
                 text.append(0x71) 
                 text.extend(bytearray(struct.pack('?', b)))
-            elif type(arg) is CString:
+            elif argType == DataType.CString:
                 s = arg.value
                 s = s.encode('utf-8')
                 argL = len(s)
@@ -451,7 +470,7 @@ class CSocketSendData:
                 else:
                     self.__result = CSocketSendDataBuildResult.StringLengthOverflowError
                     return
-            elif type(arg) is CByteArray:
+            elif argType == DataType.CByteArray:
                 ba = arg.value
                 argL = len(ba)
                 if argL <= ARG_MAXLEN:

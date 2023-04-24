@@ -1,15 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
+
 
 namespace xyz.olooko.comm.netcomm 
 {
@@ -21,6 +19,12 @@ namespace xyz.olooko.comm.netcomm
         {
             this.Value = value;
         }
+
+        public DataType GetDataType()
+        {
+            return DataType.CBoolean;
+        }
+
         public override string ToString()
         {
             return this.Value.ToString();
@@ -34,6 +38,11 @@ namespace xyz.olooko.comm.netcomm
         public CByteArray(byte[] value)
         {
             this.Value = value;
+        }
+
+        public DataType GetDataType()
+        {
+            return DataType.CByteArray;
         }
 
         public override string ToString()
@@ -50,6 +59,11 @@ namespace xyz.olooko.comm.netcomm
         {
             this.Value = value;
         }
+        public DataType GetDataType()
+        {
+            return DataType.CFloat;
+        }
+
         public override string ToString()
         {
             return this.Value.ToString();
@@ -64,6 +78,12 @@ namespace xyz.olooko.comm.netcomm
         {
             this.Value = value;
         }
+
+        public DataType GetDataType()
+        {
+            return DataType.CInteger;
+        }
+
         public override string ToString()
         {
             return this.Value.ToString();
@@ -78,6 +98,10 @@ namespace xyz.olooko.comm.netcomm
         {
             this.Value = value;
         }
+        public DataType GetDataType()
+        {
+            return DataType.CString;
+        }
 
         public override string ToString()
         {
@@ -85,8 +109,14 @@ namespace xyz.olooko.comm.netcomm
         }
     }
 
+    public enum DataType
+    {
+        CBoolean, CByteArray, CFloat, CInteger, CString
+    }
+
     public interface IDataType
     {
+        DataType GetDataType();
         string ToString();
     }
 
@@ -445,7 +475,7 @@ namespace xyz.olooko.comm.netcomm
 
                                         switch (sz)
                                         {
-                                            case 1: i = (long)buffer[0]; break;
+                                            case 1: i = (long)(sbyte)buffer[0]; break;
                                             case 2: i = (long)BitConverter.ToInt16(buffer, 0); break;
                                             case 4: i = (long)BitConverter.ToInt32(buffer, 0); break;
                                             case 8: i = BitConverter.ToInt64(buffer, 0); break;
@@ -759,9 +789,9 @@ namespace xyz.olooko.comm.netcomm
 
             foreach (IDataType arg in _args)
             {
-                switch (arg.GetType().Name)
+                switch (arg.GetDataType())
                 {
-                    case "CInteger":
+                    case DataType.CInteger:
                         {
                             long i = (arg as CInteger).Value;
 
@@ -805,7 +835,7 @@ namespace xyz.olooko.comm.netcomm
                         }
                         break;
 
-                    case "CFloat":
+                    case DataType.CFloat:
                         {
                             double f = (arg as CFloat).Value;
 
@@ -832,12 +862,12 @@ namespace xyz.olooko.comm.netcomm
                         }
                         break;
 
-                    case "CBoolean":
+                    case DataType.CBoolean:
                         textms.Write(new byte[] { 0x71 }, 0, 1);
                         textms.Write(BitConverter.GetBytes((arg as CBoolean).Value), 0, 1);
                         break;
 
-                    case "CString":
+                    case DataType.CString:
                         {
                             byte[] s = Encoding.UTF8.GetBytes((arg as CString).Value);
 
@@ -881,7 +911,7 @@ namespace xyz.olooko.comm.netcomm
                         }
                         break;
 
-                    case "CByteArray":
+                    case DataType.CByteArray:
                         {
                             byte[] ba = (arg as CByteArray).Value;
 
@@ -1006,7 +1036,7 @@ namespace xyz.olooko.comm.netcomm
                 datapos += 1;
 
                 data[datapos] = 0x04; 
-                datapos += 1;
+                //datapos += 1;
 
                 textms.Close();
             }

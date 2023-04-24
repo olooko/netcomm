@@ -36,7 +36,7 @@ public class CSocketData
         _textlen = 0;
     }
 
-    public void Append(byte[] buffer, int bytesTransferred) 
+    public void append(byte[] buffer, int bytesTransferred) 
     {
         if (_data.capacity() < _datalen + bytesTransferred) 
         {
@@ -48,7 +48,7 @@ public class CSocketData
         _datalen += bytesTransferred;
     }
 
-    public CSocketDataManipulationResult Manipulate()
+    public CSocketDataManipulationResult manipulate()
     {
         while (true) 
         {

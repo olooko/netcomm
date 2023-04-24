@@ -13,6 +13,11 @@ public class CInteger implements IDataType
     }
 
     @Override
+    public DataType getDataType() {
+        return DataType.CInteger;
+    }
+
+    @Override
     public String toString() {
         return _value.toString();
     }

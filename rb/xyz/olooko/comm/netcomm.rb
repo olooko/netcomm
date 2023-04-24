@@ -1,5 +1,13 @@
 require "socket"
 
+module DataType
+    CBoolean = "CBoolean"
+    CByteArray = "CByteArray"
+    CFloat = "CFloat"
+    CInteger = "CInteger"
+    CString = "CString"
+end
+
 class IDataType
     def value
         return @value
@@ -7,15 +15,24 @@ class IDataType
     def initialize(value)
         @value = value
     end   
+    def getDataType()
+        return DataType::CString
+    end
     def to_s
         return @value.to_s
     end 
 end
 
 class CBoolean < IDataType
+    def getDataType()
+        return DataType::CBoolean
+    end
 end
 
 class CByteArray < IDataType
+    def getDataType()
+        return DataType::CByteArray
+    end
     def to_s
         s = ""
         ba = @value.unpack("C*")
@@ -30,12 +47,21 @@ class CByteArray < IDataType
 end
 
 class CFloat < IDataType
+    def getDataType()
+        return DataType::CFloat
+    end
 end
 
 class CInteger < IDataType
+    def getDataType()
+        return DataType::CInteger
+    end
 end
 
 class CString < IDataType
+    def getDataType()
+        return DataType::CString
+    end    
     def to_s
         return @value
     end 
@@ -461,8 +487,8 @@ class CSocketSendData
         @args = args
         text = [command].pack("C")
         for arg in @args
-            case arg.class.to_s
-            when "CInteger"
+            case arg.getDataType()
+            when DataType::CInteger
                 i = arg.value
                 if -128 <= i && i <= 127
                     text << [0x31].pack("C") << [i].pack("c")
@@ -473,17 +499,17 @@ class CSocketSendData
                 else
                     text << [0x38].pack("C") << [i].pack("q>")
                 end
-            when "CFloat"
+            when DataType::CFloat
                 f = arg.value
                 if f.abs() <= 3.40282347e+38
                     text << [0x54].pack("C") << [f].pack("g")
                 else
                     text << [0x58].pack("C") << [f].pack("G")
                 end
-            when "CBoolean"
+            when DataType::CBoolean
                 b = arg.value
                 text << [0x71].pack("C") << [(b == true ? 1 : 0)].pack("c")
-            when "CString"
+            when DataType::CString
                 s = arg.value.encode("UTF-8")
                 argL = s.length
                 if argL <= ARG_MAXLEN
@@ -499,7 +525,7 @@ class CSocketSendData
                     @result = CSocketSendDataBuildResult::StringLengthOverflowError
                     return
                 end
-            when "CByteArray"
+            when DataType::CByteArray
                 ba = arg.value
                 argL = ba.length
                 if argL <= ARG_MAXLEN

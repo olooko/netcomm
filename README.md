@@ -2,6 +2,7 @@
 Easy to use TCP/UDP library for each programming language
 * [C#](https://github.com/olooko/Netcomm/tree/main/cs)
 * [Dart](https://github.com/olooko/Netcomm/tree/main/dart)
+* [F#](https://github.com/olooko/Netcomm/tree/main/fs)
 * [Go](https://github.com/olooko/Netcomm/tree/main/go)
 * [Groovy](https://github.com/olooko/Netcomm/tree/main/groovy)
 * [Java](https://github.com/olooko/Netcomm/tree/main/java)
@@ -11,4 +12,5 @@ Easy to use TCP/UDP library for each programming language
 * [Python](https://github.com/olooko/Netcomm/tree/main/py)
 * [Qt(C++)](https://github.com/olooko/Netcomm/tree/main/qt)
 * [Ruby](https://github.com/olooko/Netcomm/tree/main/rb)
+* [Scala](https://github.com/olooko/Netcomm/tree/main/scala)
 * [VB](https://github.com/olooko/Netcomm/tree/main/vb)

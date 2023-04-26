@@ -72,11 +72,10 @@ type CSocketAddress(host: string, port: int) =
     static member private GetIPAddress(host: string) = 
         let mutable ipaddress = IPAddress.Any
         if not (IPAddress.TryParse(host, &ipaddress)) then
-            if ipaddress <> IPAddress.Any then   
-                let hostEntry = Dns.GetHostEntry(host)
-                for (ip: IPAddress) in hostEntry.AddressList do       
-                   if ip.AddressFamily = AddressFamily.InterNetwork then
-                       ipaddress <- ip
+            let hostEntry = Dns.GetHostEntry(host)
+            for (ip: IPAddress) in hostEntry.AddressList do  
+                if ip.AddressFamily = AddressFamily.InterNetwork then
+                    ipaddress <- ip
         ipaddress
 
     override this.ToString() = 

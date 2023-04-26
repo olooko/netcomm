@@ -271,7 +271,7 @@ class CSocketAddress
     String get host => _host;
     int get port => _port;
 
-    CSocketAddress(String host, int port) 
+    CSocketAddress(String host, int port)
     {
         _host = host;
         _port = port;
@@ -416,7 +416,7 @@ class CSocketData
                                     sz = a.sz;
                                     argL = a.argL;
 
-                                    _args.add(CString(String.fromCharCodes(_data.sublist(_datapos + 1 + sz, _datapos + 1 + sz + argL))));
+                                    _args.add(CString(utf8.decode(_data.sublist(_datapos + 1 + sz, _datapos + 1 + sz + argL))));
                                     _datapos += argL; 
 
                                 } 
@@ -921,42 +921,57 @@ class UdpSocket extends CSocket
     }
 }
 
-Future<TcpSocket> TcpConnect(CSocketAddress address) async 
+class NetworkComm 
 {
-    RawSocket? s; 
-    
-    try {
-        s = await RawSocket.connect(InternetAddress(address.host), address.port);
-    } 
-    catch(e) {
-        s = null;
+    static Future<TcpSocket> TcpConnect(CSocketAddress address) async 
+    {
+        RawSocket? s; 
+        
+        try {
+            InternetAddress host = await _getInternetAddress(address.host);
+            s = await RawSocket.connect(host, address.port);
+        } 
+        catch(e) {
+            s = null;
+        }
+        return new TcpSocket(s);
     }
-    return new TcpSocket(s);
-}
 
-Future<TcpServer> TcpListen(CSocketAddress address) async 
-{
-    RawServerSocket? s; 
+    static Future<TcpServer> TcpListen(CSocketAddress address) async 
+    {
+        RawServerSocket? s; 
 
-    try {
-        s = await RawServerSocket.bind(InternetAddress(address.host), address.port);
+        try {
+            InternetAddress host = await _getInternetAddress(address.host);
+            s = await RawServerSocket.bind(host, address.port);
+        }
+        catch(e) {
+            s = null;
+        }
+        return new TcpServer(s);
     }
-    catch(e) {
-        s = null;
-    }
-    return new TcpServer(s);
-}
 
-Future<UdpSocket> UdpCast(CSocketAddress address) async 
-{
-    RawDatagramSocket? s;
-    
-    try {
-        s = await RawDatagramSocket.bind(InternetAddress(address.host), address.port);
-    } 
-    catch(e) {
-        s = null;
+    static Future<UdpSocket> UdpCast(CSocketAddress address) async 
+    {
+        RawDatagramSocket? s;
+        
+        try {
+            InternetAddress host = await _getInternetAddress(address.host);
+            s = await RawDatagramSocket.bind(host, address.port);
+        } 
+        catch(e) {
+            s = null;
+        }
+        return UdpSocket(s);
     }
-    return UdpSocket(s);
+
+    static Future<InternetAddress> _getInternetAddress(String host) async
+    {
+        if (null == InternetAddress.tryParse(host)) {
+            List<InternetAddress> addresses = await InternetAddress.lookup(host);
+            return addresses[0];
+        }
+        return InternetAddress(host);
+    }
 }
 

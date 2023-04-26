@@ -95,15 +95,19 @@ class CSocketAddress
 public:
     CSocketAddress();
     CSocketAddress(QString host, quint16 port);
-    CSocketAddress(QHostAddress host, quint16 port);
+    CSocketAddress(QHostAddress hostAddress, quint16 port);
 
     QString getHost();
+    QHostAddress getHostAddress();
     quint16 getPort();
     QString toString();
 
 private:
     QString _host;
+    QHostAddress _hostAddress;
     quint16 _port;
+
+    QHostAddress _toHostAddress(QString host);
 };
 
 enum class CSocketDataManipulationResult

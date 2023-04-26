@@ -3,6 +3,7 @@
 #include <QNetworkDatagram>
 #include <QtConcurrent>
 #include <QtEndian>
+#include <QHostInfo>
 #include <QtMath>
 
 CBoolean::CBoolean(bool value)
@@ -118,18 +119,37 @@ CSocketAddress::CSocketAddress()
 CSocketAddress::CSocketAddress(QString host, quint16 port)
 {
     _host = host;
+    _hostAddress = _toHostAddress(host);
     _port = port;
 }
 
-CSocketAddress::CSocketAddress(QHostAddress host, quint16 port)
+CSocketAddress::CSocketAddress(QHostAddress hostAddress, quint16 port)
 {
-    _host = host.toString();
+    _host = hostAddress.toString();
+    _hostAddress = hostAddress;
     _port = port;
+}
+
+QHostAddress CSocketAddress::_toHostAddress(QString host)
+{
+    QHostAddress address = QHostAddress(host);
+
+    if (address.isNull())
+    {
+        QHostInfo hi = QHostInfo::fromName(host);
+        return hi.addresses().first();
+    }
+    return address;
 }
 
 QString CSocketAddress::getHost()
 {
     return _host;
+}
+
+QHostAddress CSocketAddress::getHostAddress()
+{
+    return _hostAddress;
 }
 
 quint16 CSocketAddress::getPort()
@@ -816,14 +836,10 @@ void CSocket::sendProc(CSocketSendData data, CSocketAddress address, qsizetype b
     {
         QUdpSocket* s = (QUdpSocket*)_socket;
 
-        QHostAddress remoteAddress;
-        remoteAddress.setAddress(address.getHost());
-        quint16 port = address.getPort();
-
         const char *psdata = data.getBytes().constData() + bytesTransferred;
         qint64 len = data.getLength() - bytesTransferred;
 
-        length = s->writeDatagram(psdata, len, remoteAddress, port);
+        length = s->writeDatagram(psdata, len, address.getHostAddress(), address.getPort());
     }
 
     if (length > 0)
@@ -925,12 +941,8 @@ TcpSocket* TcpConnect(CSocketAddress address)
 {
     QAbstractSocket* s = new QTcpSocket();
 
-    QHostAddress connectAddress;
-    connectAddress.setAddress(address.getHost());
-    quint16 port = address.getPort();
-
     try {
-        s->connectToHost(connectAddress, port);
+        s->connectToHost(address.getHostAddress(), address.getPort());
         if (!s->waitForConnected())
             s = nullptr;
     }
@@ -946,11 +958,7 @@ TcpServer* TcpListen(CSocketAddress address)
     QTcpServer* s = new QTcpServer();
 
     try {
-        QHostAddress listenAddress;
-        listenAddress.setAddress(address.getHost());
-        quint16 port = address.getPort();
-
-        if (!s->listen(listenAddress, port))
+        if (!s->listen(address.getHostAddress(), address.getPort()))
             s = nullptr;
     }
     catch (...) {
@@ -964,12 +972,8 @@ UdpSocket* UdpCast(CSocketAddress address)
 {
     QAbstractSocket* s = new QUdpSocket();
 
-    QHostAddress bindAddress;
-    bindAddress.setAddress(address.getHost());
-    quint16 port = address.getPort();
-
     try {
-        if (!s->bind(bindAddress, port))
+        if (!s->bind(address.getHostAddress(), address.getPort()))
             s = nullptr;
     }
     catch (...) {

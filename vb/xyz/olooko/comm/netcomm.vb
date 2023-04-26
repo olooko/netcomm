@@ -141,7 +141,7 @@ Namespace xyz.olooko.comm.netcomm
             _data = New CSocketData()
             _protocol = protocol
             _result = CSocketDataManipulationResult.NoData
-            _localAddress = New CSocketAddress("0,0.0.0", 0)
+            _localAddress = New CSocketAddress("0.0.0.0", 0)
 
             If Me.Available Then
                 Dim iep As IPEndPoint = TryCast(_socket.LocalEndPoint, IPEndPoint)
@@ -271,17 +271,14 @@ Namespace xyz.olooko.comm.netcomm
         End Sub
 
         Private Shared Function GetIPAddress(ByVal host As String) As IPAddress
-            Dim ipaddress As IPAddress = Nothing
+            Dim ipaddress As IPAddress = IPAddress.Any
 
             If Not IPAddress.TryParse(host, ipaddress) Then
+                Dim hostEntry As IPHostEntry = Dns.GetHostEntry(host)
 
-                If ipaddress IsNot Nothing Then
-                    Dim hostEntry As IPHostEntry = Dns.GetHostEntry(host)
-
-                    For Each ip As IPAddress In hostEntry.AddressList
-                        If ip.AddressFamily = AddressFamily.InterNetwork Then ipaddress = ip
-                    Next
-                End If
+                For Each ip As IPAddress In hostEntry.AddressList
+                    If ip.AddressFamily = AddressFamily.InterNetwork Then Return ip
+                Next
             End If
 
             Return ipaddress

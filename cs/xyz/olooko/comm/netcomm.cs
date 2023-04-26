@@ -152,7 +152,7 @@ namespace xyz.olooko.comm.netcomm
             
             _protocol = protocol;
             _result = CSocketDataManipulationResult.NoData;
-            _localAddress = new CSocketAddress("0,0.0.0", 0);
+            _localAddress = new CSocketAddress("0.0.0.0", 0);
 
             if (this.Available)
             {
@@ -320,19 +320,18 @@ namespace xyz.olooko.comm.netcomm
 
         private static IPAddress GetIPAddress(string host)
         {
-            IPAddress ipaddress = null;
+            IPAddress ipaddress = IPAddress.Any;
 
             if (!IPAddress.TryParse(host, out ipaddress))
             {
-                if (ipaddress != null)
-                {
-                    IPHostEntry hostEntry = Dns.GetHostEntry(host);
+                IPHostEntry hostEntry = Dns.GetHostEntry(host);
 
-                    foreach (IPAddress ip in hostEntry.AddressList)
+                foreach (IPAddress ip in hostEntry.AddressList)
+                {
+                    if (ip.AddressFamily == AddressFamily.InterNetwork)
                     {
-                        if (ip.AddressFamily == AddressFamily.InterNetwork)
-                            ipaddress = ip;
-                    }
+                        return ip;
+                    }                
                 }
             }
 

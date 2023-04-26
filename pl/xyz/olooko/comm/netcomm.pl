@@ -125,7 +125,7 @@ sub new {
         protocol => shift,
         data => CSocketData->new(),
         result => CSocketDataManipulationResult->NoData,
-        localAddress => CSocketAddress->new("0,0.0.0", 0),
+        localAddress => CSocketAddress->new("0.0.0.0", 0),
     };
     bless $self, $class;
 
@@ -304,7 +304,6 @@ sub toString() {
 
 
 package CSocketData;
-use Encode;
 
 sub new() {
     my $class = shift;
@@ -468,7 +467,7 @@ sub manipulate() {
                             $sz = $a->size;
                             $argL = $a->argLength;
 
-                            $self->{args}->add(CString->new(Encode::decode("utf8", substr($self->{data}, $self->{datapos} + 1 + $sz, $argL))));
+                            $self->{args}->add(CString->new(substr($self->{data}, $self->{datapos} + 1 + $sz, $argL)));
                             $self->{datapos} += $argL;
                         }
                         elsif ((grep { $_ eq $argH } @list_ba) > 0) {
@@ -746,7 +745,7 @@ sub new() {
             $text .= pack("c", $arg->value);
         }  
         elsif ($type eq DataType->CString) {
-            my $s = Encode::encode("utf8", $arg->value);
+            my $s = encode("unicode", $arg->value);
             my $argL = length($s);
 
             if ($argL <= $ARG_MAXLEN) {

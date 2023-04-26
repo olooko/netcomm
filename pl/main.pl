@@ -4,10 +4,9 @@ use strict;
 use warnings;
 use threads;
 use IO::Handle;
-
+use Encode;
 
 STDOUT->autoflush(1);
-
 
 sub TcpServerAcceptCallback() {
     my $tcpsocket = shift;
@@ -36,6 +35,10 @@ sub CSocketReceivedCallback() {
             } elsif ($socket->protocolType == CSocketProtocolType->Udp) {
                 $protocol = "UDP";
             }
+
+            my $string = decode("UTF-8", $a3);
+            $a3 = encode("cp949", $string);
+
             printf("%s %s (%s, %s, %s, %s, [%s])\n", $protocol, $data->remoteAddress->toString(), $a1, $a2, $a3, $a4, $a5);           
         }
     }

@@ -22,7 +22,7 @@ void main(List<String> arguments)
 void UdpSocketProc(int i) async 
 {    
     CSocketAddress address = CSocketAddress('127.0.0.1', 10010);
-    UdpSocket udpsocket = await UdpCast(address);
+    UdpSocket udpsocket = await NetworkComm.UdpCast(address);
 
     if (udpsocket.available) 
     {
@@ -49,7 +49,7 @@ void UdpSocketProc(int i) async
 
 void TcpServerProc(int i) async 
 {
-    TcpServer tcpserver = await TcpListen(CSocketAddress('127.0.0.1', 10010));
+    TcpServer tcpserver = await NetworkComm.TcpListen(CSocketAddress('127.0.0.1', 10010));
     print('TcpServer Started.');
 
     if (tcpserver.running)
@@ -58,7 +58,7 @@ void TcpServerProc(int i) async
 
 void TcpClientProc(int i) async 
 {
-    TcpSocket tcpsocket = await TcpConnect(new CSocketAddress('127.0.0.1', 10010));
+    TcpSocket tcpsocket = await NetworkComm.TcpConnect(new CSocketAddress('127.0.0.1', 10010));
 
     if (tcpsocket.available)
     {

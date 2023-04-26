@@ -510,7 +510,7 @@ class CSocketSendData
                 b = arg.value
                 text << [0x71].pack("C") << [(b == true ? 1 : 0)].pack("c")
             when DataType::CString
-                s = arg.value.encode("UTF-8")
+                s = arg.value.force_encoding("ASCII-8BIT")
                 argL = s.length
                 if argL <= ARG_MAXLEN
                     if argL <= 127
